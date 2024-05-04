@@ -28,13 +28,6 @@ pip install git+https://github.com/openai/CLIP.git
 ```
 
 ## TRAINING AND EXPERIMENTS
-This section contains the details required to run the code.
-
-**IMPORTANT NOTES:**
-
-* each module cited below must be executed from the root of the     project, and not within the corresponding packages. This will ensure that all the paths used can properly work.
-
-* the file /_dataset/data_dir.py and the file /_feature_transfer/network_config.py contains all the paths (e.g., dataset location, model weights, etc...) and generic configurations that are used from each module explained below.
 
 ## Train *clip2nerf*
 
