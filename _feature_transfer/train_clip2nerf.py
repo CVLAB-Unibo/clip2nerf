@@ -21,15 +21,6 @@ from typing import Any, Dict, Tuple
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 
-"""
-export CUDA_HOME=/usr/local/cuda
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDA_HOME/lib64
-
-"""
-
-
-
-
 
 class Clip2NerfDataset(Dataset):
     def __init__(self, roots: List, split: str) -> None:
@@ -235,5 +226,5 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
 
-    trainer = FTNTrainer(loss_function="cosine")
+    trainer = FTNTrainer(loss_function = network_config.LOSS_FUNCTION, log = network_config.LOG)
     trainer.train()

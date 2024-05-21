@@ -12,6 +12,7 @@ from nerf.utils import Rays, render_image, render_image_GT
 
 from nerf.intant_ngp import NGPradianceField
 from classification.train_nerf2vec import config
+
 """
 export CUDA_HOME=/usr/local/cuda
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDA_HOME/lib64
@@ -48,7 +49,7 @@ def plot_embeddings(embedding, device, decoder, data, scene_aabb, render_step_si
     return (rgb.squeeze(dim=0).cpu().detach().numpy() * 255).astype(np.uint8)
 
 def retrive_plot_params(data_dir,img_number):
-    data_dir = os.path.join(dir_config.SIROCCHI_DATA_DIR, data_dir[2:])
+    data_dir = os.path.join(dir_config.NF2VEC_DATA_DIR, data_dir[2:])
     nerf_loader = NeRFLoaderGT(data_dir=data_dir,num_rays=config.NUM_RAYS, device="cuda")
     nerf_loader.training = False
     test_data = nerf_loader[img_number]
@@ -80,7 +81,7 @@ def draw_nerfimg(data_dirs, img_numbers, device = 'cuda'):
     imgs = []
     img_numbers = img_numbers.squeeze(0)
     for data_dir,img_number in zip(data_dirs, img_numbers):
-        path = os.path.join(dir_config.SIROCCHI_DATA_DIR, data_dir[0][2:])
+        path = os.path.join(dir_config.NF2VEC_DATA_DIR, data_dir[0][2:])
 
         weights_file_path = os.path.join(path, "nerf_weights.pth")  
         mlp_weights = torch.load(weights_file_path, map_location=torch.device(device))

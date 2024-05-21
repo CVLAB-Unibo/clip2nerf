@@ -11,4 +11,7 @@ BATCH_SIZE = 64
 INPUT_SHAPE = 512  # 1024
 OUTPUT_SHAPE = 1024  # 512
 
+LOSS_FUNCTION = 'cosine' # 'cosine' or 'l2'
 DATASET_LIST = [Path(dir_config.GROUPED_DIR)]
+
+LOG = False

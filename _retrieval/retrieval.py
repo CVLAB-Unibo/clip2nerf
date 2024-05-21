@@ -1,3 +1,6 @@
+import sys
+sys.path.append("..")
+
 from collections import defaultdict
 import math
 import os
@@ -10,10 +13,8 @@ from PIL import Image
 from _feature_transfer import network_config
 from tqdm import tqdm
 from _feature_transfer.utils import retrive_plot_params
-from classification.export_renderings import get_rays
-from classification.utils import get_mlp_params_as_matrix
 import h5py
-
+from _retrieval import retrieval_config
 from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -22,12 +23,11 @@ import numpy as np
 
 import torch
 from torch import Tensor
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from _dataset import dir_config
 
 from classification import config
 
-from sklearn.neighbors import KDTree
 from _feature_transfer.ftn import FeatureTransferNetwork
 
 from models.idecoder import ImplicitDecoder
@@ -36,7 +36,6 @@ from nerf.utils import Rays, render_image, render_image_GT
 
 import imageio.v2 as imageio
 from torch.cuda.amp import autocast
-from annoy import AnnoyIndex
 
 
 
@@ -50,7 +49,7 @@ class EmbeddingDataset(Dataset):
     def __len__(self) -> int:
         return len(self.item_paths)
 
-    def __getitem__(self, index: int) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    def __getitem__(self, index: int):
         with h5py.File(self.item_paths[index], "r") as f:
 
             nerf_embeddings = np.array(f.get("nerf_embedding"))
@@ -100,7 +99,7 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
 
     for emb,out,dir in zip(embeddings,outputs,data_dirs):
         
-        path = os.path.join(dir_config.SIROCCHI_DATA_DIR, dir[2:])
+        path = os.path.join(dir_config.NF2VEC_DATA_DIR, dir[2:])
 
         weights_file_path = os.path.join(path, "nerf_weights.pth")  
         mlp_weights = torch.load(weights_file_path, map_location=torch.device(device))
@@ -169,9 +168,9 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
                                 grid_weights=None
                 )
             if i == 0:
-                gt_path = os.path.join(dir_config.SIROCCHI_DATA_DIR, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
+                gt_path = os.path.join(dir_config.NF2VEC_DATA_DIR, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
             else:
-                gt_path = os.path.join(dir_config.SIROCCHI_DATA_DIR, dir[2:], dir_config.TRAIN_SPLIT, f"{i*10}.png")
+                gt_path = os.path.join(dir_config.NF2VEC_DATA_DIR, dir[2:], dir_config.TRAIN_SPLIT, f"{i*10}.png")
 
             imageio.imwrite(
                 os.path.join(plots_path, f'{idx}_{i}_gt.png'),
@@ -201,7 +200,7 @@ def draw_images_tesi(data_dirs, d):
         os.makedirs(plots_path)
 
 
-    gt_path = os.path.join(dir_config.SIROCCHI_DATA_DIR, d[2:], dir_config.TRAIN_SPLIT, f"00.png")
+    gt_path = os.path.join(dir_config.NF2VEC_DATA_DIR, d[2:], dir_config.TRAIN_SPLIT, f"00.png")
 
     imageio.imwrite(
         os.path.join(plots_path, f'query.png'),
@@ -211,7 +210,7 @@ def draw_images_tesi(data_dirs, d):
     for dir in data_dirs:
 
         
-        gt_path = os.path.join(dir_config.SIROCCHI_DATA_DIR, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
+        gt_path = os.path.join(dir_config.NF2VEC_DATA_DIR, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
 
         imageio.imwrite(
             os.path.join(plots_path, f'{i}_gt.png'),
@@ -240,7 +239,7 @@ def draw_text_query(data_dirs, query_dir, n, label):
     if not os.path.exists(plots_path):
         os.makedirs(plots_path)
     
-    gt_path = os.path.join(dir_config.SIROCCHI_DATA_DIR, query_dir, dir_config.TRAIN_SPLIT, f"00.png")
+    gt_path = os.path.join(dir_config.NF2VEC_DATA_DIR, query_dir, dir_config.TRAIN_SPLIT, f"00.png")
     imageio.imwrite(
             os.path.join(plots_path, f'query.png'),
             imageio.imread(gt_path)
@@ -249,7 +248,7 @@ def draw_text_query(data_dirs, query_dir, n, label):
     for dir in zip(data_dirs):
         dir = dir[0][2:]
 
-        gt_path = os.path.join(dir_config.SIROCCHI_DATA_DIR, dir, dir_config.TRAIN_SPLIT, f"00.png")
+        gt_path = os.path.join(dir_config.NF2VEC_DATA_DIR, dir, dir_config.TRAIN_SPLIT, f"00.png")
 
         imageio.imwrite(
             os.path.join(plots_path, f'{idx}_gt.png'),
@@ -268,7 +267,7 @@ def draw_real_retrieval(data_dirs, query_img):
     for dir in data_dirs:
         dir = dir[2:]
         
-        gt_path = os.path.join(dir_config.SIROCCHI_DATA_DIR, dir, dir_config.TRAIN_SPLIT, f"00.png")
+        gt_path = os.path.join(dir_config.NF2VEC_DATA_DIR, dir, dir_config.TRAIN_SPLIT, f"00.png")
         imageio.imwrite(
                 os.path.join(plots_path, f'{idx}_gt.png'),
                 imageio.imread(gt_path)
@@ -279,50 +278,6 @@ def draw_real_retrieval(data_dirs, query_img):
                 imageio.imread(query_img)
             )
 
-@torch.no_grad()
-def instance_level_recall(gallery: Tensor, outputs: Tensor, labels_gallery: Tensor, data_dirs: List, kk: List[int], decoder, multiview, draw, mean) -> Dict[int, float]:
-    max_nn = max(kk)
-    recalls = {idx: 0.0 for idx in kk}
-    targets = labels_gallery.cpu().numpy()
-    gallery = gallery.cpu().numpy()
-    gallery = gallery.reshape(-1, 1024)
-    outputs = outputs.cpu().numpy()
-    if not multiview:
-        outputs = outputs.reshape(-1, 1024)
-
-    n_features = 1024
-    annoy_index = AnnoyIndex(n_features, metric='angular')
-
-    for i, vec in enumerate(gallery):
-        annoy_index.add_item(i, vec)
-
-    annoy_index.build(n_trees=256)
-
-    dic_renderings = defaultdict(int)
-
-    for query, label_query, d, g in zip(outputs, targets, data_dirs, gallery):
-        if multiview and mean:
-            query = np.mean(query, axis=0)
-        indices_matched = annoy_index.get_nns_by_vector(query, n=max_nn, include_distances=False)
-
-        if draw:
-            label_query_tuple = tuple(label_query)
-            if dic_renderings[label_query_tuple] < 1:
-                dic_renderings[label_query_tuple] += 1
-                draw_images(decoder, gallery[indices_matched], outputs[indices_matched], np.array(data_dirs)[indices_matched])
-                print(dic_renderings)
-
-        for k in kk:
-            indices_matched_temp = indices_matched[:k]
-            matched_arrays = gallery[indices_matched_temp]
-            found = np.any(np.all(matched_arrays == g, axis=1))
-            if found:
-                recalls[k] += 1
-
-    for key, value in recalls.items():
-        recalls[key] = value / (1.0 * len(gallery))
-
-    return recalls
 
 @torch.no_grad()
 def get_recalls(gallery: Tensor, outputs: Tensor, labels_gallery: Tensor, data_dirs: List, kk: List[int], decoder, multiview, draw, mean) -> Dict[int, float]:
@@ -335,13 +290,9 @@ def get_recalls(gallery: Tensor, outputs: Tensor, labels_gallery: Tensor, data_d
     if not multiview:
         outputs = outputs.reshape(-1, 1024)
         
-    n_features = 1024  
-    annoy_index = AnnoyIndex(n_features, metric='angular')
-
-    for i, vec in enumerate(gallery):
-        annoy_index.add_item(i, vec)
-
-    annoy_index.build(n_trees=256) 
+    from sklearn.neighbors import NearestNeighbors
+    nn = NearestNeighbors(n_neighbors=max_nn+1, metric="cosine")
+    nn.fit(gallery)
 
     dic_renderings = defaultdict(int)
 
@@ -349,16 +300,14 @@ def get_recalls(gallery: Tensor, outputs: Tensor, labels_gallery: Tensor, data_d
         if multiview and mean:
             query = np.mean(query, axis=0)
         
-        indices_matched = annoy_index.get_nns_by_vector(query, n=max_nn, include_distances=False)
+        _, indices_matched = nn.kneighbors(query, n_neighbors=max_nn+1)
 
 
         if draw:
             label_query_tuple = tuple(label_query)
             if dic_renderings[label_query_tuple] < 2:
                 dic_renderings[label_query_tuple] += 1
-                #draw_text_query(np.array(data_dirs)[indices_matched], d, dic_renderings[label_query_tuple],tuple(label_query))
                 draw_images(decoder, gallery[indices_matched], outputs[indices_matched], np.array(data_dirs)[indices_matched])
-                #print(dic_renderings)
 
         for k in kk:
             indices_matched_temp = indices_matched[0:k]
@@ -378,12 +327,14 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
     multiview = n_view > 1
 
     ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt_path = os.path.join('_feature_transfer','ckpts','cosine_sim','ckpt_149.pt')
-    #print(f'loading weights: {ftn_ckpt_path}')
-    ftn_ckpt = torch.load(ftn_ckpt_path)
+    ftn_ckpt = torch.load(dir_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
     ftn.to(device)
+    
+    dset_root = Path(dir_config.GALLERY_PATH)
+    dset = EmbeddingDataset(dset_root, dir_config.DATASET_SPLIT)
+
 
     # Init nerf2vec 
     decoder = ImplicitDecoder(
@@ -399,13 +350,8 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
     decoder.eval()
     decoder = decoder.to(device)
 
-    ckpt_path = os.path.join('classification','train','ckpts','499.pt')
-    #print(f'loading weights: {ckpt_path}')
-    ckpt = torch.load(ckpt_path)
+    ckpt = torch.load(dir_config.NF2VEC_PATH)
     decoder.load_state_dict(ckpt["decoder"])
-    
-    dset_root = Path("data/text_no_aug")
-    dset = EmbeddingDataset(dset_root, dir_config.TEST_SPLIT)
 
     seen_embeddings = set()
 
@@ -417,7 +363,7 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
     occurrences = defaultdict(int)
 
     embedding_dict = {}
-
+    print(len(dset))
     for i in range(len(dset)):
         embedding, clip, data_dir, label = dset[i]
         output = ftn(clip.to(device))
@@ -448,11 +394,8 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
     outputs = torch.stack(outputs)
     labels = torch.stack(labels)
     
-    if instance_level:
-        recalls = instance_level_recall(embeddings, outputs, labels, data_dirs, [1, 5, 10], decoder, multiview, draw, mean)
-    else:
-        #recalls = get_recalls(embeddings, outputs, labels, data_dirs, [1, 5, 10], decoder, multiview, draw, mean)
-        recalls = get_recalls_nerf_excluded(embeddings, outputs, labels, data_dirs, [1, 5, 10], decoder, multiview, draw, mean)
+    recalls = get_recalls_nerf_excluded(embeddings, outputs, labels, data_dirs, [1, 5, 10], decoder, multiview, draw, mean)
+    
     for key, value in recalls.items():
         print(f"Recall@{key} : {100. * value:.2f}%")
 
@@ -469,11 +412,6 @@ def get_recalls_true_imgs(gallery: Tensor, outputs: Tensor, labels_gallery: Tens
     outputs_tensor = outputs_tensor.reshape(-1, 1024)
     label_query = ([item[1] for item in outputs])
     imgs = ([item[2] for item in outputs])
-         
-    #annoy_index = AnnoyIndex(1024, metric='angular')
-    #for i, vec in enumerate(gallery):
-    #    annoy_index.add_item(i, vec)
-    #annoy_index.build(n_trees=256)
 
     nn = NearestNeighbors(n_neighbors=11, metric="cosine")
     nn.fit(gallery)
@@ -482,7 +420,6 @@ def get_recalls_true_imgs(gallery: Tensor, outputs: Tensor, labels_gallery: Tens
 
     print("Inizio test")
     for query, label_query, img in zip(outputs_tensor,label_query,imgs):
-        #indices_matched = annoy_index.get_nns_by_vector(query, n=max_nn, include_distances=False)
         query = np.expand_dims(query, 0)
         _, indices_matched = nn.kneighbors(query, n_neighbors=max_nn+1)
         indices_matched = indices_matched[0]
@@ -505,16 +442,14 @@ def get_recalls_true_imgs(gallery: Tensor, outputs: Tensor, labels_gallery: Tens
 def retrieval_true_imgs(draw = False , device='cuda:0'):
 
     ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt_path = os.path.join('_feature_transfer','ckpts','controlnetx7+sinteticox7 2e-5','ckpt_99.pt')
-    #ftn_ckpt_path = os.path.join('_feature_transfer','ckpts','cosine_sim 4l gelu','ckpt_399.pt')
-    #print(f'loading weights: {ftn_ckpt_path}')
-    ftn_ckpt = torch.load("_feature_transfer/ckpts/cosine_sim/ckpt_149.pt")
+
+    ftn_ckpt = torch.load(dir_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
     ftn.to(device)
     
-    dset_root = Path("data/grouped_no_aug")
-    dset = EmbeddingDataset(dset_root, dir_config.TEST_SPLIT)
+    dset_root = Path(dir_config.GALLERY_PATH)
+    dset = EmbeddingDataset(dset_root, dir_config.DATASET_SPLIT)
 
     seen_embeddings = set()
 
@@ -542,7 +477,7 @@ def retrieval_true_imgs(draw = False , device='cuda:0'):
     print("Gallery caricata",len(embeddings))
 
     
-    test_dir = "real_test/domainnet/real/real"
+    test_dir = dir_config.DOMAINNET_PATH
     label_map = {
         "airplane": 0,
         "bench": 1,
@@ -646,15 +581,13 @@ def retrieval_times_memory(device = "cuda"):
     clip_model, preprocess = clip.load("ViT-B/32", device=device)
 
     ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt_path = os.path.join('_feature_transfer','ckpts','cosine_sim 4l gelu','ckpt_399.pt')
-    #print(f'loading weights: {ftn_ckpt_path}')
-    ftn_ckpt = torch.load(ftn_ckpt_path)
+    ftn_ckpt = torch.load(dir_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
     ftn.to(device)
     
-    dset_root = Path("data/grouped_no_aug")
-    dset = EmbeddingDataset(dset_root, dir_config.TEST_SPLIT)
+    dset_root = Path(dir_config.GALLERY_PATH)
+    dset = EmbeddingDataset(dset_root, dir_config.DATASET_SPLIT)
 
     seen_embeddings = set()
 
@@ -709,4 +642,12 @@ def retrieval_times_memory(device = "cuda"):
 
     print("The time of the pipeline clip-clip2nerf-retrieval is ", np.array(times).mean())
     print("The size of gallery is:",gallery.itemsize*gallery.size/1024/1024,"Megabytes.")
-    
+
+
+if __name__ == "__main__":
+    seed = 42  
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+
+    retrieval(n_view=retrieval_config.N_VIEW, mean=retrieval_config.MEAN, draw=retrieval_config.DRAW)

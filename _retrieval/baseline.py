@@ -1,3 +1,5 @@
+import sys
+sys.path.append("..")
 
 from collections import defaultdict
 import os
@@ -11,9 +13,9 @@ import h5py
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
+from _retrieval import retrieval_config
 from tqdm import tqdm
 from _dataset import dir_config
-from annoy import AnnoyIndex
 
 import warnings
 
@@ -33,7 +35,7 @@ class EmbeddingDataset(Dataset):
     def __len__(self) -> int:
         return len(self.item_paths)
 
-    def __getitem__(self, index: int) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    def __getitem__(self, index: int):
         with h5py.File(self.item_paths[index], "r") as f:
             
 
@@ -58,8 +60,8 @@ class EmbeddingDataset(Dataset):
 
 def baseline(n_view=1,multiview=False,draw = False , device='cuda:0'):
 
-    dset_test = EmbeddingDataset([Path("data/grouped_no_aug")], dir_config.TEST_SPLIT)
-    dset_test_nerf = EmbeddingDataset([Path("data/grouped_no_aug 7view"),Path("controlnet_grouped")], dir_config.TEST_SPLIT)
+    dset_test = EmbeddingDataset([dir_config.GALLERY_PATH], dir_config.TEST_SPLIT)
+    dset_test_nerf = EmbeddingDataset([dir_config.GALLERY_PATH], dir_config.TEST_SPLIT)
 
     seen_embeddings = set()
     out_clip = []
@@ -111,7 +113,7 @@ def baseline(n_view=1,multiview=False,draw = False , device='cuda:0'):
     labels = []
     data_dirs = []
     embedding_dict = {}
-    print(len(dset_test_nerf))
+
     for i in range(len(dset_test_nerf)):
         embedding, clip_emb, data_dir, label = dset_test_nerf[i]
         embedding = embedding.squeeze()
@@ -176,12 +178,6 @@ def get_recalls_baseline(gallery: Tensor, nerfs_emb: Tensor, outputs: Tensor, la
     nn = NearestNeighbors(n_neighbors=max_nn+36, metric="cosine")
     nn.fit(gallery)
     
-    #annoy_index = AnnoyIndex(512, metric='angular')
-
-    #for i, vec in enumerate(gallery):
-    #    annoy_index.add_item(i, vec)
-
-    #annoy_index.build(n_trees=256)
     dic_renderings = defaultdict(int)
 
     print("Inizio test")
@@ -189,7 +185,6 @@ def get_recalls_baseline(gallery: Tensor, nerfs_emb: Tensor, outputs: Tensor, la
         query = query.reshape(1, -1)
 
         _, indices_matched = nn.kneighbors(query, n_neighbors=max_nn+36)
-        #indices_matched = annoy_index.get_nns_by_vector(query, n=max_nn, include_distances=False)
 
         if draw:
             if dic_renderings[label_query] < 2:
@@ -223,7 +218,7 @@ def get_recalls_baseline(gallery: Tensor, nerfs_emb: Tensor, outputs: Tensor, la
 
 def baseline_domainnet(device='cuda'):
 
-    dset_test_nerf = EmbeddingDataset(Path("data/from_nerfs_no_aug"), dir_config.TEST_SPLIT)
+    dset_test_nerf = EmbeddingDataset(Path(dir_config.GALLERY_PATH), dir_config.DATASET_SPLIT)
 
     seen_embeddings = set()
     clip_embeddings = []
@@ -258,7 +253,7 @@ def baseline_domainnet(device='cuda'):
     embeddings = torch.stack(embeddings)
     labels = torch.stack(labels)
 
-    test_dir = "real_test/domainnet/real/real"
+    test_dir = dir_config.DOMAINNET_PATH
     label_map = {
         "airplane": 0,
         "bench": 1,
@@ -322,11 +317,6 @@ def baseline_domainnet(device='cuda'):
         from sklearn.neighbors import NearestNeighbors
         nn = NearestNeighbors(n_neighbors=max_nn+1, metric="cosine")
         nn.fit(gallery)
-        
-        #annoy_index = AnnoyIndex(512, metric='angular')
-        #for i, vec in enumerate(gallery):
-        #    annoy_index.add_item(i, vec)
-        #annoy_index.build(n_trees=256)
 
         dic_renderings = defaultdict(int)
         print("Inizio test")
@@ -334,8 +324,6 @@ def baseline_domainnet(device='cuda'):
         for query,label_query in tqdm(zip(outputs_tensor,label_query), desc="KNN search", ncols=100):
             query = query.reshape(1, -1)
             _, indices_matched = nn.kneighbors(query, n_neighbors=max_nn+1)
-
-            #indices_matched = annoy_index.get_nns_by_vector(query, n=max_nn, include_distances=False)
 
             if draw:
                 if dic_renderings[label_query] < 2:
@@ -359,3 +347,12 @@ def baseline_domainnet(device='cuda'):
 
     for key, value in recalls.items():
         print(f"Recall@{key} : {100. * value:.2f}%")
+
+
+if __name__ == "__main__":
+    seed = 42  
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+
+    baseline(n_view=retrieval_config.N_VIEW, multiview=retrieval_config.N_VIEW > 1)
