@@ -1,3 +1,6 @@
+import sys
+sys.path.append("..")
+
 import datetime
 from itertools import chain
 import os
@@ -68,8 +71,8 @@ class Clip2NerfDataset(Dataset):
 
 class FTNTrainer:
     def __init__(self,device='cuda',log=False, loss_function='l2') -> None:
-        dset_root1 = Path("data/grouped_no_aug")
-        dset_root2 = Path("data/text_no_aug")
+        dset_root1 = Path(dir_config.EMB_IMG)
+        dset_root2 = Path(dir_config.EMB_TEXT)
         self.log = log
         self.loss_function = loss_function
 
@@ -107,7 +110,7 @@ class FTNTrainer:
 
     def config_wandb(self):
         wandb.init(
-            project='clip2nerf_feature_transfer_network',
+            project=network_config.WANDB_PROJECT,
             name=f'run_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}',
             config={
                 'epochs': self.num_epochs,
@@ -282,3 +285,12 @@ class FTNTrainer:
 
             if i > 1000:
                 break
+
+if __name__ == "__main__":
+    seed = 42  
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+
+    trainer = FTNTrainer(loss_function = network_config.LOSS_FUNCTION, log = network_config.LOG)
+    trainer.train()

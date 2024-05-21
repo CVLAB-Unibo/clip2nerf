@@ -1,46 +1,20 @@
-import os
+import sys
+sys.path.append("..")
+
 import h5py
 import torch
-import wandb
-import numpy as np
-from tqdm import tqdm
-import torch.nn as nn
-from pathlib import Path
-from typing import Tuple
-from torch import Tensor
-from _dataset import dir_config
-from torch.utils.data import Dataset, DataLoader
 import clip
-from typing import Any, Dict, Tuple
+import numpy as np
 import pandas as pd
-
+from tqdm import tqdm
+from pathlib import Path
+from _dataset import dir_config
+from torch.utils.data import DataLoader
+from _dataset.InrEmbeddingNerf import InrEmbeddingNerf
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, preprocess = clip.load("ViT-B/32", device=device)
 
-
-class Clip2NerfDataset(Dataset):
-    def __init__(self, root: Path, split: str) -> None:
-        super().__init__()
-
-        self.root = root / split
-        self.item_paths = sorted(self.root.glob("*.h5"), key=lambda x: int(x.stem))
-
-    def __len__(self) -> int:
-        return len(self.item_paths)
-
-    def __getitem__(self, index: int):
-        with h5py.File(self.item_paths[index], "r") as f:
-            embedding = np.array(f.get("embedding"))
-            embedding = torch.from_numpy(embedding)
-            data_dir = f["data_dir"][()]
-            data_dir = [item.decode("utf-8") for item in data_dir]
-            class_id = np.array(f.get("class_id"))
-            class_id = torch.from_numpy(class_id).long()
-
-        return embedding, data_dir[0], class_id
-
-    
 
 def create_clip_embedding(text):
     text = clip.tokenize(text).to(device)
@@ -50,23 +24,23 @@ def create_clip_embedding(text):
 
     return clip_embedding
 
-def create_embeddings():
+def create_text_embeddings_pairs():
     notfound=0
-    dset_root = Path("embeddings")
+    dset_root = Path(dir_config.NF2VEC_EMB)
 
-    train_dset = Clip2NerfDataset(dset_root, dir_config.TRAIN_SPLIT)
+    train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    val_dset = Clip2NerfDataset(dset_root, dir_config.VAL_SPLIT)
+    val_dset = InrEmbeddingNerf(dset_root, dir_config.VAL_SPLIT)
     val_loader = DataLoader(val_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    test_dset = Clip2NerfDataset(dset_root, dir_config.TEST_SPLIT)
+    test_dset = InrEmbeddingNerf(dset_root, dir_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1, num_workers=0, shuffle=False)
 
     loaders = [train_loader, val_loader, test_loader]
     splits = [dir_config.TRAIN_SPLIT, dir_config.VAL_SPLIT, dir_config.TEST_SPLIT]
 
-    file_path = 'blip2_xxl_shapenet.csv'
+    file_path = dir_config.BLIP2_CAPTIONS
 
     data = pd.read_csv(file_path, header=0)
     
@@ -102,7 +76,7 @@ def create_embeddings():
         subsets = [output[i:i + 64] for i in range(0, len(output), 64)]
 
         for i, subset in enumerate(subsets):
-            out_root = Path(os.path.join('data', 'text_no_aug'))
+            out_root = Path(dir_config.EMB_TEXT)
             h5_path = out_root / Path(f"{split}") / f"{i}.h5"
             h5_path.parent.mkdir(parents=True, exist_ok=True)
             
@@ -121,3 +95,7 @@ def create_embeddings():
                 f.create_dataset("data_dir", data=data_dirs_list)
                 f.create_dataset("class_id", data=np.array(class_ids_list))
         print(notfound)
+
+
+if __name__ == "__main__":
+    create_text_embeddings_pairs()

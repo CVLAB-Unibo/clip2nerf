@@ -1,6 +1,7 @@
 import sys
 sys.path.append("..")
 
+import datetime
 import copy
 import h5py
 import logging
@@ -91,8 +92,8 @@ class FTNTrainer:
 
     def config_wandb(self) -> None:
         wandb.init(
-            project="clip2nerf",
-            name=f"{self.run_name}_30k",
+            project=network_config.WANDB_PROJECT,
+            name=f'run_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}',
             config={
                 "epochs": self.num_epochs,
                 "lr": network_config.LR,
@@ -239,6 +240,5 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
  
-    loss = "cosine"
-    model = FTNTrainer(log=True, loss_function=loss)
+    model = FTNTrainer(log=network_config.LOG, loss_function=network_config.LOSS_FUNCTION)
     model.train()

@@ -1,24 +1,29 @@
-import os
+### NF2VEC DATA
+NF2VEC_EMB = '' # Embeddings produced by nf2vec framework 
+NF2VEC_DATA = '' # NeRF gt views and weights used by nf2vec 
+NF2VEC_CKPT = '' # Weights of trained nf2vec framework
 
-EMBEDDINGS_DIR = os.path.join('/', 'media', 'data7', 'fballerini', 'clip2nerf', 'classification', 'embeddings_30k')
-GROUPED_DIR_NO_AUG = os.path.join('data', 'grouped_no_aug')
-NF2VEC_DATA_DIR = os.path.join('/', 'media', 'data4TB', 'sirocchi', 'nerf2vec')
-DATA_DIR = os.path.join('data', 'splits')
-DATA_FROM_NERFS_DIR = os.path.join('data', 'from_nerfs')
-DATA_TEXT_DIR = os.path.join('data', 'text')
-GROUPED_DIR = r'C:\Users\rober\Downloads\clip2nerf\data\imgs_batches\grouped_no_aug'
-NERF2VEC_TRAINED = os.path.join('classification', 'train', 'ckpts', '499.pt')
+### CAPTIONS
+BLIP2_CAPTIONS = '' # Blip2 captions of ShapeNet views
+
+### OUR DATA
+EMB_IMG_SPLIT = '' # Our image embeddings (one h5 file for each training sample)
+EMB_IMG = '' # Our image embeddings grouped in to batches (gt views)
+EMB_TEXT = '' # Our text embeddings grouped in to batches
+EMB_IMG_RENDER = '' # Our image embeddings grouped in to batches (rendered with NerfAcc)
+NERF2VEC_TRAINED = '' #
+
+### CHECKPOINTS
 CKPT_DIR_COSINE = r'C:\Users\rober\Downloads\clip2nerf\_feature_transfer\ckpt\cosine'
 CKPT_DIR_L2 = r'C:\Users\rober\Downloads\clip2nerf\_feature_transfer\ckpt\l2'
 
-NF2VEC_PATH = ""
+### SPLITS
 TRAIN_SPLIT = 'train'
 VAL_SPLIT = 'val'
 TEST_SPLIT = 'test'
 
-
 ### RETRIEVAL
-MODEL_PATH = ""
+MODEL_PATH = ''
 GALLERY_PATH = r'C:\Users\rober\Downloads\clip2nerf\data\imgs_batches\grouped_no_aug\\'
-DATASET_SPLIT = "test"
-DOMAINNET_PATH = ""
+DATASET_SPLIT = 'test'
+DOMAINNET_PATH = ''

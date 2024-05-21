@@ -77,7 +77,7 @@ if __name__ == "__main__":
     neigh = NearestNeighbors(n_neighbors=1, metric="cosine")
     neigh.fit(text_embs)
     
-    dset_root = Path(dir_config.GROUPED_DIR)
+    dset_root = Path(dir_config.EMB_IMG)
     test_dset = Clip2NerfDataset(dset_root, dir_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1)
     

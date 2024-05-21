@@ -12,39 +12,14 @@ from tqdm import tqdm
 from pathlib import Path
 import PIL.Image as Image
 from diffusers.utils import load_image
-from torch.utils.data import Dataset , DataLoader
-from diffusers import AutoPipelineForImage2Image
+from torch.utils.data import DataLoader
+from _dataset.InrEmbeddingNerf import InrEmbeddingNerf
 
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, preprocess = clip.load("ViT-B/32", device=device)
-
-
-class Clip2NerfDataset(Dataset):
-    def __init__(self, path: str) -> None:
-        super().__init__()
-
-        self.json_file_path = path
-
-        with open(self.json_file_path, 'r') as json_file:
-            self.item_paths = json.load(json_file)
-
-    def __len__(self) -> int:
-        return len(self.item_paths)
-
-    def __getitem__(self, index: int) :
-        item_path = Path(self.item_paths[index])
-        with h5py.File(item_path, "r") as f:
-            embedding = np.array(f.get("embedding"))
-            embedding = torch.from_numpy(embedding)
-            data_dir = f["data_dir"][()]
-            data_dir = [item.decode("utf-8") for item in data_dir]
-            class_id = np.array(f.get("class_id"))
-            class_id = torch.from_numpy(class_id).long()
-
-        return data_dir[0], embedding, class_id
 
 
 def create_clip_embedding(img):
@@ -60,12 +35,9 @@ def generate_augmented_embeddings(nview,outpath,starting_idx,files):
     controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-depth", torch_dtype=torch.float16)
     pipe = StableDiffusionControlNetPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", controlnet=controlnet, torch_dtype=torch.float16,requires_safety_checker = False, safety_checker= None)
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
-    
-    """pipe = AutoPipelineForImage2Image.from_pretrained("stabilityai/sdxl-turbo", torch_dtype=torch.float16, variant="fp16")
-    pipe.to("cuda")"""
+
     pipe.set_progress_bar_config(disable=True)
     pipe.enable_model_cpu_offload()
-    #pipe.unet = torch.compile(pipe.unet, mode="reduce-overhead", fullgraph=True)
 
     labels = {
         0:'an airplane fling in the blue sky, sparse clouds',
@@ -164,23 +136,23 @@ def generate_augmented_embeddings(nview,outpath,starting_idx,files):
         ],
     }
 
-    #train_dset = Clip2NerfDataset(files[0])
-    #train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
+    train_dset = InrEmbeddingNerf(files[0])
+    train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    val_dset = Clip2NerfDataset(files[1])
+    val_dset = InrEmbeddingNerf(files[1])
     val_loader = DataLoader(val_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    test_dset = Clip2NerfDataset(files[2])
+    test_dset = InrEmbeddingNerf(files[2])
     test_loader = DataLoader(test_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    loaders = [ val_loader, test_loader]
-    splits = [ 'val', 'test']
+    loaders = [ train_loader, val_loader, test_loader]
+    splits = [ 'train', 'val', 'test']
 
     for loader, split, starting_id in zip(loaders, splits, starting_idx):
         num_batches = len(loader)
         idx = starting_id
         for batch in tqdm(loader, total=num_batches, desc=f"Saving {split} data", ncols=100):
-            data_dir, nerf_embedding, class_id = batch
+            nerf_embedding, data_dir, class_id = batch
             s = data_dir[0][2:].split('/')
             nerf_embedding=nerf_embedding.squeeze(0)
             class_id = class_id.squeeze(0)

@@ -86,7 +86,7 @@ class FTNTrainer:
 
     def config_wandb(self):
         wandb.init(
-            project='clip2nerf_feature_transfer_network',
+            project=network_config.WANDB_PROJECT,
             name=f'run_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}',
             config={
                 'epochs': self.num_epochs,
