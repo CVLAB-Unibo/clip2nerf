@@ -30,4 +30,4 @@ DATASET_SPLIT = 'test'
 
 ### OTHER DATASETS
 DOMAINNET_PATH = ''
-SHAPENET_DEPTH = ''
+SHAPENET_DEPTH = '' # https://drive.google.com/file/d/1IA9gYqK0K7oVXdRPQDdGitLArpexdfSI/view?usp=sharing
