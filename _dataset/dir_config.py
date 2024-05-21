@@ -11,6 +11,7 @@ EMB_IMG_SPLIT = '' # Our image embeddings (one h5 file for each training sample)
 EMB_IMG = '' # Our image embeddings grouped in to batches (gt views)
 EMB_TEXT = '' # Our text embeddings grouped in to batches
 EMB_IMG_RENDER = '' # Our image embeddings grouped in to batches (rendered with NerfAcc)
+EMB_CONTROLNET = ''
 NERF2VEC_TRAINED = '' #
 
 ### CHECKPOINTS
@@ -26,4 +27,7 @@ TEST_SPLIT = 'test'
 MODEL_PATH = ''
 GALLERY_PATH = r'C:\Users\rober\Downloads\clip2nerf\data\imgs_batches\grouped_no_aug\\'
 DATASET_SPLIT = 'test'
+
+### OTHER DATASETS
 DOMAINNET_PATH = ''
+SHAPENET_DEPTH = ''

@@ -1,6 +1,7 @@
-import json
+import sys
+sys.path.append("..")
+
 import os
-import math
 import random
 import cv2
 import h5py
@@ -11,10 +12,9 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 import PIL.Image as Image
-from diffusers.utils import load_image
+from _dataset import dir_config
 from torch.utils.data import DataLoader
 from _dataset.InrEmbeddingNerf import InrEmbeddingNerf
-
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
 
 
@@ -29,7 +29,7 @@ def create_clip_embedding(img):
 
     return image_features
 
-def generate_augmented_embeddings(nview,outpath,starting_idx,files):
+def generate_augmented_embeddings(nview,outpath):
     seed = 42
     generator = torch.manual_seed(seed)
     controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-depth", torch_dtype=torch.float16)
@@ -136,21 +136,23 @@ def generate_augmented_embeddings(nview,outpath,starting_idx,files):
         ],
     }
 
-    train_dset = InrEmbeddingNerf(files[0])
+    dset_root = dir_config.NF2VEC_EMB
+
+    train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    val_dset = InrEmbeddingNerf(files[1])
+    val_dset = InrEmbeddingNerf(dset_root, dir_config.VAL_SPLIT)
     val_loader = DataLoader(val_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    test_dset = InrEmbeddingNerf(files[2])
+    test_dset = InrEmbeddingNerf(dset_root, dir_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1, num_workers=0, shuffle=False)
 
     loaders = [ train_loader, val_loader, test_loader]
     splits = [ 'train', 'val', 'test']
 
-    for loader, split, starting_id in zip(loaders, splits, starting_idx):
+    for loader, split in zip(loaders, splits):
         num_batches = len(loader)
-        idx = starting_id
+        idx = 0
         for batch in tqdm(loader, total=num_batches, desc=f"Saving {split} data", ncols=100):
             nerf_embedding, data_dir, class_id = batch
             s = data_dir[0][2:].split('/')
@@ -161,9 +163,9 @@ def generate_augmented_embeddings(nview,outpath,starting_idx,files):
             for i in range(36):
                 
                 if i < 10:                    
-                    depth_path = os.path.join('depth', s[-2], s[-1], 'easy', f"0{i}.png")
+                    depth_path = os.path.join(dir_config.SHAPENET_DEPTH, s[-2], s[-1], 'easy', f"0{i}.png")
                 else:
-                    depth_path = os.path.join('depth', s[-2], s[-1], 'easy', f"{i}.png")
+                    depth_path = os.path.join(dir_config.SHAPENET_DEPTH, s[-2], s[-1], 'easy', f"{i}.png")
                 depth = cv2.imread(depth_path,cv2.IMREAD_GRAYSCALE)
                 depth = cv2.resize(depth, (512, 512))
                 depth = 255 - depth
@@ -195,3 +197,6 @@ def generate_augmented_embeddings(nview,outpath,starting_idx,files):
                     f.create_dataset("img_number", data=np.array(imgs[i][1]))
                 idx += 1
 
+if __name__ == "__main__":
+    n_views = 7
+    generate_augmented_embeddings(n_views, dir_config.EMB_CONTROLNET)
