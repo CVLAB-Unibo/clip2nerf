@@ -93,7 +93,6 @@ def generate_embeddings_pairs_mean(n_views: int):
             nerf_loader.training = False
             
             clip_features = []
-            # Renderizzo le 36 immagini e ne calcolo gli embeddings di clip
             views = list(range(36))
             random.seed(idx)
             random.shuffle(views)
@@ -131,7 +130,7 @@ def generate_embeddings_pairs_mean(n_views: int):
             class_id = class_id.detach().cpu().numpy()
             data_dir = str(data_dir[0])
             
-            out_root = Path(f"/media/data7/fballerini/clip2nerf/data/30k/split_render_mean{n_views}")
+            out_root = Path(dir_config.EMB_IMG_RENDER_SPLIT_PATH)
             h5_path = out_root / split / f"{idx}.h5"
             h5_path.parent.mkdir(parents=True, exist_ok=True)
             with h5py.File(h5_path, "w") as f:
