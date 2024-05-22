@@ -136,7 +136,7 @@ def generate_augmented_embeddings(nview,outpath):
         ],
     }
 
-    dset_root = dir_config.NF2VEC_EMB
+    dset_root = dir_config.NF2VEC_EMB_PATH
 
     train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
@@ -163,9 +163,9 @@ def generate_augmented_embeddings(nview,outpath):
             for i in range(36):
                 
                 if i < 10:                    
-                    depth_path = os.path.join(dir_config.SHAPENET_DEPTH, s[-2], s[-1], 'easy', f"0{i}.png")
+                    depth_path = os.path.join(dir_config.SHAPENET_DEPTH_PATH, s[-2], s[-1], 'easy', f"0{i}.png")
                 else:
-                    depth_path = os.path.join(dir_config.SHAPENET_DEPTH, s[-2], s[-1], 'easy', f"{i}.png")
+                    depth_path = os.path.join(dir_config.SHAPENET_DEPTH_PATH, s[-2], s[-1], 'easy', f"{i}.png")
                 depth = cv2.imread(depth_path,cv2.IMREAD_GRAYSCALE)
                 depth = cv2.resize(depth, (512, 512))
                 depth = 255 - depth
@@ -199,4 +199,4 @@ def generate_augmented_embeddings(nview,outpath):
 
 if __name__ == "__main__":
     n_views = 7
-    generate_augmented_embeddings(n_views, dir_config.EMB_CONTROLNET)
+    generate_augmented_embeddings(n_views, dir_config.EMB_CONTROLNET_PATH)

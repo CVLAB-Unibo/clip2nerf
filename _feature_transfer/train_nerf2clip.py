@@ -75,9 +75,9 @@ class FTNTrainer:
 
         self.loss_function = loss_function
         if loss_function == "l2":
-            self.ckpts_path = Path(dir_config.CKPT_DIR_L2)
+            self.ckpts_path = Path(dir_config.CKPT_L2_PATH)
         elif loss_function == "cosine":
-            self.ckpts_path = Path(dir_config.CKPT_DIR_COSINE)
+            self.ckpts_path = Path(dir_config.CKPT_COSINE_PATH)
         self.ckpts_path.mkdir(parents=True, exist_ok=True)
         self.run_name = self.ckpts_path.name
 

@@ -71,9 +71,9 @@ class FTNTrainer:
         print(model)   
 
         if loss_function=='l2':
-            self.ckpts_path = Path(dir_config.CKPT_DIR_L2)
+            self.ckpts_path = Path(dir_config.CKPT_L2_PATH)
         elif loss_function=='cosine':
-            self.ckpts_path = Path(dir_config.CKPT_DIR_COSINE)
+            self.ckpts_path = Path(dir_config.CKPT_COSINE_PATH)
 
         self.epoch = 0
         

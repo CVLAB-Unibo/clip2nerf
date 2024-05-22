@@ -29,7 +29,7 @@ def create_clip_embedding(img):
 
 def generate_dataset():
     
-    dset_root = Path(dir_config.NF2VEC_EMB)
+    dset_root = Path(dir_config.NF2VEC_EMB_PATH)
 
     train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
@@ -54,9 +54,9 @@ def generate_dataset():
             clip_features = []
             for i in range(36):
                 if i < 10:
-                    img = os.path.join(dir_config.NF2VEC_DATA, data_dir[0][2:], dir_config.TRAIN_SPLIT, f"0{i}.png")
+                    img = os.path.join(dir_config.NF2VEC_DATA_PATH, data_dir[0][2:], dir_config.TRAIN_SPLIT, f"0{i}.png")
                 else:
-                    img = os.path.join(dir_config.NF2VEC_DATA, data_dir[0][2:], dir_config.TRAIN_SPLIT, f"{i}.png")
+                    img = os.path.join(dir_config.NF2VEC_DATA_PATH, data_dir[0][2:], dir_config.TRAIN_SPLIT, f"{i}.png")
                 clip_feature = create_clip_embedding(Image.open(img)).detach().squeeze(0).cpu().numpy()
                 clip_features.append(clip_feature)
             nerf_embedding = nerf_embedding.detach().cpu().numpy()
@@ -70,7 +70,7 @@ def generate_dataset():
         subsets = [data[i:i + 64] for i in range(0, len(data), 64)]
 
         for i, subset in enumerate(subsets):
-            out_root = Path(dir_config.EMB_IMG)
+            out_root = Path(dir_config.EMB_IMG_PATH)
             h5_path = out_root / Path(f"{split}") / f"{i}.h5"
             h5_path.parent.mkdir(parents=True, exist_ok=True)
             

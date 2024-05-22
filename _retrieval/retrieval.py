@@ -99,7 +99,7 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
 
     for emb,out,dir in zip(embeddings,outputs,data_dirs):
         
-        path = os.path.join(dir_config.NF2VEC_DATA, dir[2:])
+        path = os.path.join(dir_config.NF2VEC_DATA_PATH, dir[2:])
 
         weights_file_path = os.path.join(path, "nerf_weights.pth")  
         mlp_weights = torch.load(weights_file_path, map_location=torch.device(device))
@@ -168,9 +168,9 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
                                 grid_weights=None
                 )
             if i == 0:
-                gt_path = os.path.join(dir_config.NF2VEC_DATA, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
+                gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
             else:
-                gt_path = os.path.join(dir_config.NF2VEC_DATA, dir[2:], dir_config.TRAIN_SPLIT, f"{i*10}.png")
+                gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, dir[2:], dir_config.TRAIN_SPLIT, f"{i*10}.png")
 
             imageio.imwrite(
                 os.path.join(plots_path, f'{idx}_{i}_gt.png'),
@@ -200,7 +200,7 @@ def draw_images_tesi(data_dirs, d):
         os.makedirs(plots_path)
 
 
-    gt_path = os.path.join(dir_config.NF2VEC_DATA, d[2:], dir_config.TRAIN_SPLIT, f"00.png")
+    gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, d[2:], dir_config.TRAIN_SPLIT, f"00.png")
 
     imageio.imwrite(
         os.path.join(plots_path, f'query.png'),
@@ -210,7 +210,7 @@ def draw_images_tesi(data_dirs, d):
     for dir in data_dirs:
 
         
-        gt_path = os.path.join(dir_config.NF2VEC_DATA, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
+        gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
 
         imageio.imwrite(
             os.path.join(plots_path, f'{i}_gt.png'),
@@ -225,7 +225,7 @@ def draw_text_query(data_dirs, query_dir, n, label):
     
     idx = 0
 
-    file_path = dir_config.BLIP2_CAPTIONS
+    file_path = dir_config.BLIP2_CAPTIONS_PATH
     data = pd.read_csv(file_path, header=0)
 
     query_dir = query_dir[2:]
@@ -239,7 +239,7 @@ def draw_text_query(data_dirs, query_dir, n, label):
     if not os.path.exists(plots_path):
         os.makedirs(plots_path)
     
-    gt_path = os.path.join(dir_config.NF2VEC_DATA, query_dir, dir_config.TRAIN_SPLIT, f"00.png")
+    gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, query_dir, dir_config.TRAIN_SPLIT, f"00.png")
     imageio.imwrite(
             os.path.join(plots_path, f'query.png'),
             imageio.imread(gt_path)
@@ -248,7 +248,7 @@ def draw_text_query(data_dirs, query_dir, n, label):
     for dir in zip(data_dirs):
         dir = dir[0][2:]
 
-        gt_path = os.path.join(dir_config.NF2VEC_DATA, dir, dir_config.TRAIN_SPLIT, f"00.png")
+        gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, dir, dir_config.TRAIN_SPLIT, f"00.png")
 
         imageio.imwrite(
             os.path.join(plots_path, f'{idx}_gt.png'),
@@ -267,7 +267,7 @@ def draw_real_retrieval(data_dirs, query_img):
     for dir in data_dirs:
         dir = dir[2:]
         
-        gt_path = os.path.join(dir_config.NF2VEC_DATA, dir, dir_config.TRAIN_SPLIT, f"00.png")
+        gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, dir, dir_config.TRAIN_SPLIT, f"00.png")
         imageio.imwrite(
                 os.path.join(plots_path, f'{idx}_gt.png'),
                 imageio.imread(gt_path)
@@ -327,13 +327,13 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
     multiview = n_view > 1
 
     ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt = torch.load(dir_config.MODEL_PATH)
+    ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
     ftn.to(device)
     
-    dset_root = Path(dir_config.GALLERY_PATH)
-    dset = EmbeddingDataset(dset_root, dir_config.DATASET_SPLIT)
+    dset_root = Path(retrieval_config.GALLERY_PATH)
+    dset = EmbeddingDataset(dset_root, retrieval_config.DATASET_SPLIT)
 
 
     # Init nerf2vec 
@@ -350,7 +350,7 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
     decoder.eval()
     decoder = decoder.to(device)
 
-    ckpt = torch.load(dir_config.NF2VEC_CKPT)
+    ckpt = torch.load(dir_config.NF2VEC_CKPT_PATH)
     decoder.load_state_dict(ckpt["decoder"])
 
     seen_embeddings = set()
@@ -443,13 +443,13 @@ def retrieval_true_imgs(draw = False , device='cuda:0'):
 
     ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
 
-    ftn_ckpt = torch.load(dir_config.MODEL_PATH)
+    ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
     ftn.to(device)
     
-    dset_root = Path(dir_config.GALLERY_PATH)
-    dset = EmbeddingDataset(dset_root, dir_config.DATASET_SPLIT)
+    dset_root = Path(retrieval_config.GALLERY_PATH)
+    dset = EmbeddingDataset(dset_root, retrieval_config.DATASET_SPLIT)
 
     seen_embeddings = set()
 
@@ -581,13 +581,13 @@ def retrieval_times_memory(device = "cuda"):
     clip_model, preprocess = clip.load("ViT-B/32", device=device)
 
     ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt = torch.load(dir_config.MODEL_PATH)
+    ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
     ftn.to(device)
     
-    dset_root = Path(dir_config.GALLERY_PATH)
-    dset = EmbeddingDataset(dset_root, dir_config.DATASET_SPLIT)
+    dset_root = Path(retrieval_config.GALLERY_PATH)
+    dset = EmbeddingDataset(dset_root, retrieval_config.DATASET_SPLIT)
 
     seen_embeddings = set()
 

@@ -1,33 +1,27 @@
 ### NF2VEC DATA
-NF2VEC_EMB = '' # Embeddings produced by nf2vec framework 
-NF2VEC_DATA = '' # NeRF gt views and weights used by nf2vec 
-NF2VEC_CKPT = '' # Weights of trained nf2vec framework
+NF2VEC_EMB_PATH = ""   # NeRF embeddings produced by nf2vec
+NF2VEC_DATA_PATH = ""  # ShapeNetRender dataset (views + NeRF weights)
+NF2VEC_CKPT_PATH = ""  # weights of trained nf2vec framework
 
-### CAPTIONS
-BLIP2_CAPTIONS = '' # Blip2 captions of ShapeNet views
+### OUR DATA, i.e. (nf2vec_emb, clip_emb) pairs
+EMB_IMG_SPLIT_PATH = ""   # CLIP embeddings of NeRF ground-truth views (one .h5 file for each pair)
+EMB_IMG_PATH = ""         # CLIP embeddings of NeRF ground-truth views (one .h5 file for each batch of pairs)
+EMB_IMG_RENDER_PATH = ""  # CLIP embeddings of NeRF rendered views
+EMB_TEXT_PATH = ""        # CLIP embeddings of BLIP-2 captions
+EMB_CONTROLNET_PATH = ""  # CLIP embeddings of ControlNet-generated images
 
-### OUR DATA
-EMB_IMG_SPLIT = '' # Our image embeddings (one h5 file for each training sample)
-EMB_IMG = '' # Our image embeddings grouped in to batches (gt views)
-EMB_TEXT = '' # Our text embeddings grouped in to batches
-EMB_IMG_RENDER = '' # Our image embeddings grouped in to batches (rendered with NerfAcc)
-EMB_CONTROLNET = ''
-NERF2VEC_TRAINED = '' #
+### BLIP-2
+BLIP2_CAPTIONS_PATH = ""  # BLIP-2 captions of ShapeNetRender
 
 ### CHECKPOINTS
-CKPT_DIR_COSINE = r'C:\Users\rober\Downloads\clip2nerf\_feature_transfer\ckpt\cosine'
-CKPT_DIR_L2 = r'C:\Users\rober\Downloads\clip2nerf\_feature_transfer\ckpt\l2'
+CKPT_COSINE_PATH = ""  # weights of clip2nerf/nerf2clip trained with cosine distance
+CKPT_L2_PATH = ""      # weights of clip2nerf/nerf2clip trained with L2 distance
 
 ### SPLITS
-TRAIN_SPLIT = 'train'
-VAL_SPLIT = 'val'
-TEST_SPLIT = 'test'
-
-### RETRIEVAL
-MODEL_PATH = ''
-GALLERY_PATH = r'C:\Users\rober\Downloads\clip2nerf\data\imgs_batches\grouped_no_aug\\'
-DATASET_SPLIT = 'test'
+TRAIN_SPLIT = "train"
+VAL_SPLIT = "val"
+TEST_SPLIT = "test"
 
 ### OTHER DATASETS
-DOMAINNET_PATH = ''
-SHAPENET_DEPTH = '' # https://drive.google.com/file/d/1IA9gYqK0K7oVXdRPQDdGitLArpexdfSI/view?usp=sharing
+DOMAINNET_PATH = ""
+SHAPENET_DEPTH_PATH = ""  # ShapeNetRender depth-maps

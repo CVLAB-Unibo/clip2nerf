@@ -70,14 +70,14 @@ if __name__ == "__main__":
     text_embs = np.asarray([get_text_emb(capt, clip_model) for capt in captions])
     
     nerf2clip = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    sd = torch.load(f"{dir_config.CKPT_DIR_COSINE}/best.pt")
+    sd = torch.load(f"{dir_config.CKPT_COSINE_PATH}/best.pt")
     nerf2clip.load_state_dict(sd["ftn"])
     nerf2clip = nerf2clip.eval().cuda()
     
     neigh = NearestNeighbors(n_neighbors=1, metric="cosine")
     neigh.fit(text_embs)
     
-    dset_root = Path(dir_config.EMB_IMG)
+    dset_root = Path(dir_config.EMB_IMG_PATH)
     test_dset = Clip2NerfDataset(dset_root, dir_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1)
     
@@ -94,5 +94,5 @@ if __name__ == "__main__":
         num_samples += len(class_ids)
     accuracy = num_correct_preds / num_samples
             
-    wandb.init(project="clip2nerf", name=f"zero_shot_{Path(dir_config.CKPT_DIR_COSINE).name}_30k")
+    wandb.init(project="clip2nerf", name=f"zero_shot_{Path(dir_config.CKPT_COSINE_PATH).name}_30k")
     wandb.log({"accuracy": accuracy})

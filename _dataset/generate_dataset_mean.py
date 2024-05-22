@@ -45,7 +45,7 @@ class Dataset(Dataset):
 
 
 def write_batch_to_file(batch, idx, split):
-    out_root = Path(dir_config.EMB_IMG)
+    out_root = Path(dir_config.EMB_IMG_PATH)
     h5_path = out_root / Path(f"{split}") / f"{idx}.h5"
     h5_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -76,7 +76,7 @@ def create_mean_clip_embedding(images_root: str, views: List[int]):
 
 
 def group_dataset():
-    dset_root = Path(dir_config.EMB_IMG_SPLIT)
+    dset_root = Path(dir_config.EMB_IMG_SPLIT_PATH)
 
     train_dset = Dataset(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=64, num_workers=0, shuffle=True)
@@ -98,7 +98,7 @@ def group_dataset():
             idx += 1
 
 def generate_dataset_mean_clip_emb(n_views: int):
-    dset_root = Path(dir_config.NF2VEC_EMB)
+    dset_root = Path(dir_config.NF2VEC_EMB_PATH)
 
     train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
@@ -128,7 +128,7 @@ def generate_dataset_mean_clip_emb(n_views: int):
             class_id = class_id.detach().cpu().numpy()
             data_dir = str(data_dir[0])
 
-            gt_path = os.path.join(dir_config.NF2VEC_DATA, data_dir[2:], dir_config.TRAIN_SPLIT)
+            gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, data_dir[2:], dir_config.TRAIN_SPLIT)
             views = list(range(36))
             random.seed(idx)
             random.shuffle(views)

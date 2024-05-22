@@ -51,7 +51,7 @@ def generate_embeddings_pairs_mean(n_views: int):
     ngp_mlp = NGPradianceField(**config.INSTANT_NGP_MLP_CONF).to(device)
     ngp_mlp.eval()
 
-    dset_root = Path(dir_config.NF2VEC_EMB)
+    dset_root = Path(dir_config.NF2VEC_EMB_PATH)
 
     train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
@@ -71,7 +71,7 @@ def generate_embeddings_pairs_mean(n_views: int):
         for idx, batch in enumerate(tqdm(loader, total=num_batches, desc="Batch", leave=False)):
             nerf_emb, data_dir, class_id = batch
 
-            path = os.path.join(dir_config.NF2VEC_DATA, data_dir[0][2:])
+            path = os.path.join(dir_config.NF2VEC_DATA_PATH, data_dir[0][2:])
 
             weights_file_path = os.path.join(path, "nerf_weights.pth")  
             mlp_weights = torch.load(weights_file_path, map_location=torch.device(device))
@@ -159,7 +159,7 @@ def generate_embeddings_pairs():
     ngp_mlp = NGPradianceField(**config.INSTANT_NGP_MLP_CONF).to(device)
     ngp_mlp.eval()
 
-    dset_root = Path(dir_config.NF2VEC_EMB)
+    dset_root = Path(dir_config.NF2VEC_EMB_PATH)
 
     train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
@@ -181,7 +181,7 @@ def generate_embeddings_pairs():
 
             nerf_embedding=nerf_embedding.squeeze(0)
 
-            path = os.path.join(dir_config.NF2VEC_DATA, data_dir[0][2:])
+            path = os.path.join(dir_config.NF2VEC_DATA_PATH, data_dir[0][2:])
 
             weights_file_path = os.path.join(path, "nerf_weights.pth")  
             mlp_weights = torch.load(weights_file_path, map_location=torch.device(device))
@@ -241,7 +241,7 @@ def generate_embeddings_pairs():
         subsets = [data[i: i + 64] for i in range(0, len(data), 64)]
 
         for i, subset in enumerate(tqdm(subsets, desc="Subset", leave="False")):
-            out_root = Path(dir_config.EMB_IMG_RENDER)
+            out_root = Path(dir_config.EMB_IMG_RENDER_PATH)
             h5_path = out_root / split / f"{i}.h5"
             h5_path.parent.mkdir(parents=True, exist_ok=True)
             

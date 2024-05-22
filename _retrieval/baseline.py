@@ -60,8 +60,8 @@ class EmbeddingDataset(Dataset):
 
 def baseline(n_view=1,multiview=False,draw = False , device='cuda:0'):
 
-    dset_test = EmbeddingDataset([dir_config.GALLERY_PATH], dir_config.TEST_SPLIT)
-    dset_test_nerf = EmbeddingDataset([dir_config.GALLERY_PATH], dir_config.TEST_SPLIT)
+    dset_test = EmbeddingDataset([retrieval_config.GALLERY_PATH], dir_config.TEST_SPLIT)
+    dset_test_nerf = EmbeddingDataset([retrieval_config.GALLERY_PATH], dir_config.TEST_SPLIT)
 
     seen_embeddings = set()
     out_clip = []
@@ -218,7 +218,7 @@ def get_recalls_baseline(gallery: Tensor, nerfs_emb: Tensor, outputs: Tensor, la
 
 def baseline_domainnet(device='cuda'):
 
-    dset_test_nerf = EmbeddingDataset(Path(dir_config.GALLERY_PATH), dir_config.DATASET_SPLIT)
+    dset_test_nerf = EmbeddingDataset(Path(retrieval_config.GALLERY_PATH), retrieval_config.DATASET_SPLIT)
 
     seen_embeddings = set()
     clip_embeddings = []

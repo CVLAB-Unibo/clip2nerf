@@ -26,7 +26,7 @@ def create_clip_embedding(text):
 
 def create_text_embeddings_pairs():
     notfound=0
-    dset_root = Path(dir_config.NF2VEC_EMB)
+    dset_root = Path(dir_config.NF2VEC_EMB_PATH)
 
     train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
@@ -40,7 +40,7 @@ def create_text_embeddings_pairs():
     loaders = [train_loader, val_loader, test_loader]
     splits = [dir_config.TRAIN_SPLIT, dir_config.VAL_SPLIT, dir_config.TEST_SPLIT]
 
-    file_path = dir_config.BLIP2_CAPTIONS
+    file_path = dir_config.BLIP2_CAPTIONS_PATH
 
     data = pd.read_csv(file_path, header=0)
     
@@ -76,7 +76,7 @@ def create_text_embeddings_pairs():
         subsets = [output[i:i + 64] for i in range(0, len(output), 64)]
 
         for i, subset in enumerate(subsets):
-            out_root = Path(dir_config.EMB_TEXT)
+            out_root = Path(dir_config.EMB_TEXT_PATH)
             h5_path = out_root / Path(f"{split}") / f"{i}.h5"
             h5_path.parent.mkdir(parents=True, exist_ok=True)
             
