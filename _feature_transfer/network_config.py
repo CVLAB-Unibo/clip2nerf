@@ -1,5 +1,5 @@
 from pathlib import Path 
-from _dataset import dir_config
+from _dataset import data_config
 
 LAYERS = [512, 768, 1024]  # [1024, 768, 512]
 
@@ -12,7 +12,7 @@ INPUT_SHAPE = 512  # 1024
 OUTPUT_SHAPE = 1024  # 512
 
 LOSS_FUNCTION = 'cosine' # 'cosine' or 'l2'
-DATASET_LIST = [Path(dir_config.EMB_IMG_PATH)]
+DATASET_LIST = [Path(data_config.EMB_IMG_PATH)]
 
 LOG = False
 

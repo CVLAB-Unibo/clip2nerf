@@ -13,7 +13,7 @@ import torch.nn as nn
 from pathlib import Path
 from typing import List, Tuple
 from torch import Tensor
-from _dataset import dir_config
+from _dataset import data_config
 from _feature_transfer import network_config
 from torch.utils.data import Dataset , DataLoader
 from _feature_transfer.ftn import FeatureTransferNetwork
@@ -55,15 +55,15 @@ class FTNTrainer:
         self.loss_function = loss_function
 
         #i file sono stati divisi in batch da 64 esempi quindi batch = 1 * 64
-        train_dset = Clip2NerfDataset(dset_list, dir_config.TRAIN_SPLIT)
+        train_dset = Clip2NerfDataset(dset_list, data_config.TRAIN_SPLIT)
         self.train_loader = DataLoader(train_dset, batch_size=1, num_workers=4,prefetch_factor=4,shuffle=True)
 
 
-        val_dset = Clip2NerfDataset(dset_list, dir_config.VAL_SPLIT)
+        val_dset = Clip2NerfDataset(dset_list, data_config.VAL_SPLIT)
         self.val_loader = DataLoader(val_dset, batch_size=1, num_workers=4)
 
 
-        test_dset = Clip2NerfDataset(dset_list, dir_config.TEST_SPLIT)
+        test_dset = Clip2NerfDataset(dset_list, data_config.TEST_SPLIT)
         self.test_loader = DataLoader(test_dset, batch_size=1, num_workers=4)
 
         model = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
@@ -71,9 +71,9 @@ class FTNTrainer:
         print(model)   
 
         if loss_function=='l2':
-            self.ckpts_path = Path(dir_config.CKPT_L2_PATH)
+            self.ckpts_path = Path(data_config.CKPT_L2_PATH)
         elif loss_function=='cosine':
-            self.ckpts_path = Path(dir_config.CKPT_COSINE_PATH)
+            self.ckpts_path = Path(data_config.CKPT_COSINE_PATH)
 
         self.epoch = 0
         

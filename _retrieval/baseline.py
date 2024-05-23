@@ -15,7 +15,7 @@ from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 from _retrieval import retrieval_config
 from tqdm import tqdm
-from _dataset import dir_config
+from _dataset import data_config
 
 import warnings
 
@@ -60,8 +60,8 @@ class EmbeddingDataset(Dataset):
 
 def baseline(n_view=1,multiview=False,draw = False , device='cuda:0'):
 
-    dset_test = EmbeddingDataset([retrieval_config.GALLERY_PATH], dir_config.TEST_SPLIT)
-    dset_test_nerf = EmbeddingDataset([retrieval_config.GALLERY_PATH], dir_config.TEST_SPLIT)
+    dset_test = EmbeddingDataset([retrieval_config.GALLERY_PATH], data_config.TEST_SPLIT)
+    dset_test_nerf = EmbeddingDataset([retrieval_config.GALLERY_PATH], data_config.TEST_SPLIT)
 
     seen_embeddings = set()
     out_clip = []
@@ -253,7 +253,7 @@ def baseline_domainnet(device='cuda'):
     embeddings = torch.stack(embeddings)
     labels = torch.stack(labels)
 
-    test_dir = dir_config.DOMAINNET_PATH
+    test_dir = data_config.DOMAINNET_PATH
     label_map = {
         "airplane": 0,
         "bench": 1,

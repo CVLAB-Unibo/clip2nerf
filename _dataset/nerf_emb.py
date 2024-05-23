@@ -1,11 +1,12 @@
-import h5py
-import torch
-import numpy as np
 from pathlib import Path
+
+import h5py
+import numpy as np
+import torch
 from torch.utils.data import Dataset
 
 
-class InrEmbeddingNerf(Dataset):
+class NerfEmbeddings(Dataset):
     def __init__(self, root: Path, split: str) -> None:
         super().__init__()
 

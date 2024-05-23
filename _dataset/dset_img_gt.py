@@ -1,47 +1,38 @@
 import sys
 sys.path.append("..")
+
 import os
+from pathlib import Path
+
 import clip
 import h5py
-import torch
 import numpy as np
+import torch
 from PIL import Image
-from tqdm import tqdm
-from pathlib import Path
-from _dataset import dir_config
 from torch.utils.data import DataLoader
-from _dataset.InrEmbeddingNerf import InrEmbeddingNerf
+from tqdm import tqdm
 
-
+from _dataset import data_config
+from _dataset.nerf_emb import NerfEmbeddings
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, preprocess = clip.load("ViT-B/32", device=device)
 
 
-def create_clip_embedding(img):
-    image = preprocess(img).unsqueeze(0).to(device)
-    with torch.no_grad():
-        image_features = clip_model.encode_image(image)
+def generate_emb_pairs():
+    dset_root = Path(data_config.NF2VEC_EMB_PATH)
 
-    return image_features
-
-
-
-def generate_dataset():
-    
-    dset_root = Path(dir_config.NF2VEC_EMB_PATH)
-
-    train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
+    train_dset = NerfEmbeddings(dset_root, data_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    val_dset = InrEmbeddingNerf(dset_root, dir_config.VAL_SPLIT)
+    val_dset = NerfEmbeddings(dset_root, data_config.VAL_SPLIT)
     val_loader = DataLoader(val_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    test_dset = InrEmbeddingNerf(dset_root, dir_config.TEST_SPLIT)
+    test_dset = NerfEmbeddings(dset_root, data_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1, num_workers=0, shuffle=False)
 
     loaders = [train_loader, val_loader, test_loader]
-    splits = [dir_config.TRAIN_SPLIT, dir_config.VAL_SPLIT, dir_config.TEST_SPLIT]
+    splits = [data_config.TRAIN_SPLIT, data_config.VAL_SPLIT, data_config.TEST_SPLIT]
 
     for loader, split in zip(loaders, splits):
         num_batches = len(loader)
@@ -54,10 +45,10 @@ def generate_dataset():
             clip_features = []
             for i in range(36):
                 if i < 10:
-                    img = os.path.join(dir_config.NF2VEC_DATA_PATH, data_dir[0][2:], dir_config.TRAIN_SPLIT, f"0{i}.png")
+                    img = os.path.join(data_config.NF2VEC_DATA_PATH, data_dir[0][2:], data_config.TRAIN_SPLIT, f"0{i}.png")
                 else:
-                    img = os.path.join(dir_config.NF2VEC_DATA_PATH, data_dir[0][2:], dir_config.TRAIN_SPLIT, f"{i}.png")
-                clip_feature = create_clip_embedding(Image.open(img)).detach().squeeze(0).cpu().numpy()
+                    img = os.path.join(data_config.NF2VEC_DATA_PATH, data_dir[0][2:], data_config.TRAIN_SPLIT, f"{i}.png")
+                clip_feature = generate_clip_emb(Image.open(img)).detach().squeeze(0).cpu().numpy()
                 clip_features.append(clip_feature)
             nerf_embedding = nerf_embedding.detach().cpu().numpy()
             class_id = class_id.detach().cpu().numpy()
@@ -70,11 +61,11 @@ def generate_dataset():
         subsets = [data[i:i + 64] for i in range(0, len(data), 64)]
 
         for i, subset in enumerate(subsets):
-            out_root = Path(dir_config.EMB_IMG_PATH)
+            out_root = Path(data_config.EMB_IMG_PATH)
             h5_path = out_root / Path(f"{split}") / f"{i}.h5"
             h5_path.parent.mkdir(parents=True, exist_ok=True)
             
-            with h5py.File(h5_path, 'w') as f:
+            with h5py.File(h5_path, "w") as f:
                 print(len(subset))
                 clip_embeddings, nerf_embeddings, data_dirs, class_ids, img_numbers= zip(*subset)
                 f.create_dataset("clip_embedding", data=np.array(clip_embeddings))
@@ -82,7 +73,15 @@ def generate_dataset():
                 f.create_dataset("data_dir", data=data_dirs)
                 f.create_dataset("class_id", data=np.array(class_ids))
                 f.create_dataset("img_number", data=np.array(img_numbers))
+                
+
+def generate_clip_emb(img):
+    image = preprocess(img).unsqueeze(0).to(device)
+    with torch.no_grad():
+        image_features = clip_model.encode_image(image)
+
+    return image_features
             
 
 if __name__ == "__main__":
-    generate_dataset()
+    generate_emb_pairs()

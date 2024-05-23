@@ -3,33 +3,29 @@ sys.path.append("..")
 
 import os
 import random
+from pathlib import Path
+
+import clip
 import cv2
 import h5py
-import clip
-import torch
 import imageio
 import numpy as np
-from tqdm import tqdm
-from pathlib import Path
 import PIL.Image as Image
-from _dataset import dir_config
+import torch
+from diffusers import (ControlNetModel, StableDiffusionControlNetPipeline,
+                       UniPCMultistepScheduler)
 from torch.utils.data import DataLoader
-from _dataset.InrEmbeddingNerf import InrEmbeddingNerf
-from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
+from tqdm import tqdm
 
+from _dataset import data_config
+from _dataset.dset_img_gt import generate_clip_emb
+from _dataset.nerf_emb import NerfEmbeddings
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, preprocess = clip.load("ViT-B/32", device=device)
 
 
-def create_clip_embedding(img):
-    image = preprocess(img).unsqueeze(0).to(device)
-    with torch.no_grad():
-        image_features = clip_model.encode_image(image)
-
-    return image_features
-
-def generate_augmented_embeddings(nview,outpath):
+def generate_emb_pairs(nview, out_root):
     seed = 42
     generator = torch.manual_seed(seed)
     controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-depth", torch_dtype=torch.float16)
@@ -40,19 +36,19 @@ def generate_augmented_embeddings(nview,outpath):
     pipe.enable_model_cpu_offload()
 
     labels = {
-        0:'an airplane fling in the blue sky, sparse clouds',
-        1:'a bench in the park, cloudy sky and green trees',
-        2:'a cabinet in little studio, small office',
-        3:'a car parked on the side of the road, gray asphalt, green trees, sidewalk',
-        4:'a chair in a large room',
-        5:'a display in a large room, beautiful house',
-        6:'a lamp in a room, soft  lighting',
-        7:'a speaker in a beautiful room, bedroom',
-        8:'a gun on a table, small room',
-        9:'a sofa in a large room, beautiful house',
-        10:'a table in a house, beautiful room',
-        11:'a phone on a table',
-        12:'a watercraft, sea travel, blue ocean'
+        0: "an airplane fling in the blue sky, sparse clouds",
+        1: "a bench in the park, cloudy sky and green trees",
+        2: "a cabinet in little studio, small office",
+        3: "a car parked on the side of the road, gray asphalt, green trees, sidewalk",
+        4: "a chair in a large room",
+        5: "a display in a large room, beautiful house",
+        6: "a lamp in a room, soft  lighting",
+        7: "a speaker in a beautiful room, bedroom",
+        8: "a gun on a table, small room",
+        9: "a sofa in a large room, beautiful house",
+        10: "a table in a house, beautiful room",
+        11: "a phone on a table",
+        12: "a watercraft, sea travel, blue ocean"
     }
 
     prompts_per_class = {
@@ -136,26 +132,26 @@ def generate_augmented_embeddings(nview,outpath):
         ],
     }
 
-    dset_root = dir_config.NF2VEC_EMB_PATH
+    dset_root = data_config.NF2VEC_EMB_PATH
 
-    train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
+    train_dset = NerfEmbeddings(dset_root, data_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    val_dset = InrEmbeddingNerf(dset_root, dir_config.VAL_SPLIT)
+    val_dset = NerfEmbeddings(dset_root, data_config.VAL_SPLIT)
     val_loader = DataLoader(val_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    test_dset = InrEmbeddingNerf(dset_root, dir_config.TEST_SPLIT)
+    test_dset = NerfEmbeddings(dset_root, data_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1, num_workers=0, shuffle=False)
 
     loaders = [ train_loader, val_loader, test_loader]
-    splits = [ 'train', 'val', 'test']
+    splits = [ "train", "val", "test"]
 
     for loader, split in zip(loaders, splits):
         num_batches = len(loader)
         idx = 0
         for batch in tqdm(loader, total=num_batches, desc=f"Saving {split} data", ncols=100):
             nerf_embedding, data_dir, class_id = batch
-            s = data_dir[0][2:].split('/')
+            s = data_dir[0][2:].split("/")
             nerf_embedding=nerf_embedding.squeeze(0)
             class_id = class_id.squeeze(0)
 
@@ -163,9 +159,9 @@ def generate_augmented_embeddings(nview,outpath):
             for i in range(36):
                 
                 if i < 10:                    
-                    depth_path = os.path.join(dir_config.SHAPENET_DEPTH_PATH, s[-2], s[-1], 'easy', f"0{i}.png")
+                    depth_path = os.path.join(data_config.SHAPENET_DEPTH_PATH, s[-2], s[-1], "easy", f"0{i}.png")
                 else:
-                    depth_path = os.path.join(dir_config.SHAPENET_DEPTH_PATH, s[-2], s[-1], 'easy', f"{i}.png")
+                    depth_path = os.path.join(data_config.SHAPENET_DEPTH_PATH, s[-2], s[-1], "easy", f"{i}.png")
                 depth = cv2.imread(depth_path,cv2.IMREAD_GRAYSCALE)
                 depth = cv2.resize(depth, (512, 512))
                 depth = 255 - depth
@@ -179,17 +175,17 @@ def generate_augmented_embeddings(nview,outpath):
                                     num_inference_steps=20, generator=generator, image=Image.fromarray(imgs[i][0]),
                                     negative_prompt="worst quality, low quality, monochromatic,drawing, badly drawn, anime, cartoon, cartoony, painting, paintings, sketch, sketches, rendering, fake",).images[0]
                     if imgs[i][1] < 10:
-                        p = Path(outpath)/Path("imgs")/Path(f"{data_dir[0]}/train/0{imgs[i][1]}.png")
+                        p = Path(out_root)/Path("imgs")/Path(f"{data_dir[0]}/train/0{imgs[i][1]}.png")
                     else:
-                        p = Path(outpath)/Path("imgs")/Path(f"{data_dir[0]}/train/{imgs[i][1]}.png")
+                        p = Path(out_root)/Path("imgs")/Path(f"{data_dir[0]}/train/{imgs[i][1]}.png")
                     p.parent.mkdir(parents=True, exist_ok=True)
                     imageio.imwrite(p,image)
-                clip_feature = create_clip_embedding(image).detach().squeeze(0).cpu().numpy()
-                out_root = Path(outpath)
+                clip_feature = generate_clip_emb(image).detach().squeeze(0).cpu().numpy()
+                out_root = Path(out_root)
                 h5_path = out_root / Path(f"{split}") / f"{idx}.h5"
                 h5_path.parent.mkdir(parents=True, exist_ok=True)
                 
-                with h5py.File(h5_path, 'w') as f:
+                with h5py.File(h5_path, "w") as f:
                     f.create_dataset("clip_embedding", data=np.array(clip_feature))
                     f.create_dataset("nerf_embedding", data=np.array(nerf_embedding))
                     f.create_dataset("data_dir", data=data_dir[0])
@@ -197,6 +193,9 @@ def generate_augmented_embeddings(nview,outpath):
                     f.create_dataset("img_number", data=np.array(imgs[i][1]))
                 idx += 1
 
+
 if __name__ == "__main__":
     n_views = 7
-    generate_augmented_embeddings(n_views, dir_config.EMB_CONTROLNET_PATH)
+    out_root = data_config.EMB_CONTROLNET_PATH
+    
+    generate_emb_pairs(n_views, out_root)

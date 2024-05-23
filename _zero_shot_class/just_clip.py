@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from typing import Tuple
 
-from _dataset import dir_config
+from _dataset import data_config
 
 logging.disable(logging.INFO)
 os.environ["WANDB_SILENT"] = "true"
@@ -70,8 +70,8 @@ if __name__ == "__main__":
     neigh = NearestNeighbors(n_neighbors=1, metric="cosine")
     neigh.fit(text_embs)
     
-    dset_root = Path(dir_config.EMB_IMG_PATH)
-    test_dset = Clip2NerfDataset(dset_root, dir_config.TEST_SPLIT)
+    dset_root = Path(data_config.EMB_IMG_PATH)
+    test_dset = Clip2NerfDataset(dset_root, data_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1)
     
     num_samples = 0

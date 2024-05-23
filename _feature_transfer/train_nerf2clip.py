@@ -20,7 +20,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import Dataset, DataLoader
 from typing import Any, Dict, Tuple
 
-from _dataset import dir_config
+from _dataset import data_config
 from _feature_transfer import network_config
 from _feature_transfer.ftn import FeatureTransferNetwork
 
@@ -57,17 +57,17 @@ class Clip2NerfDataset(Dataset):
 
 class FTNTrainer:
     def __init__(self, device="cuda", log=False, loss_function="l2") -> None:
-        dset_root = Path(dir_config.GROUPED_DIR)
+        dset_root = Path(data_config.GROUPED_DIR)
         self.log = log
 
         # i file sono stati divisi in batch da 64 esempi quindi batch = 1 * 64
-        train_dset = Clip2NerfDataset(dset_root, dir_config.TRAIN_SPLIT)
+        train_dset = Clip2NerfDataset(dset_root, data_config.TRAIN_SPLIT)
         self.train_loader = DataLoader(train_dset, batch_size=1, num_workers=4, prefetch_factor=4, shuffle=True)
 
-        val_dset = Clip2NerfDataset(dset_root, dir_config.VAL_SPLIT)
+        val_dset = Clip2NerfDataset(dset_root, data_config.VAL_SPLIT)
         self.val_loader = DataLoader(val_dset, batch_size=1, num_workers=4)
 
-        test_dset = Clip2NerfDataset(dset_root, dir_config.TEST_SPLIT)
+        test_dset = Clip2NerfDataset(dset_root, data_config.TEST_SPLIT)
         self.test_loader = DataLoader(test_dset, batch_size=1, num_workers=4)
 
         model = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
@@ -75,9 +75,9 @@ class FTNTrainer:
 
         self.loss_function = loss_function
         if loss_function == "l2":
-            self.ckpts_path = Path(dir_config.CKPT_L2_PATH)
+            self.ckpts_path = Path(data_config.CKPT_L2_PATH)
         elif loss_function == "cosine":
-            self.ckpts_path = Path(dir_config.CKPT_COSINE_PATH)
+            self.ckpts_path = Path(data_config.CKPT_COSINE_PATH)
         self.ckpts_path.mkdir(parents=True, exist_ok=True)
         self.run_name = self.ckpts_path.name
 

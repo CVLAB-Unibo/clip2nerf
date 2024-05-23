@@ -1,46 +1,40 @@
 import sys
 sys.path.append("..")
 
-import h5py
-import torch
+from pathlib import Path
+
 import clip
+import h5py
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
-from pathlib import Path
-from _dataset import dir_config
+import torch
 from torch.utils.data import DataLoader
-from _dataset.InrEmbeddingNerf import InrEmbeddingNerf
+from tqdm import tqdm
+
+from _dataset import data_config
+from _dataset.nerf_emb import NerfEmbeddings
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, preprocess = clip.load("ViT-B/32", device=device)
 
 
-def create_clip_embedding(text):
-    text = clip.tokenize(text).to(device)
-
-    with torch.no_grad():
-        clip_embedding = clip_model.encode_text(text)
-
-    return clip_embedding
-
-def create_text_embeddings_pairs():
+def generate_emb_pairs():
     notfound=0
-    dset_root = Path(dir_config.NF2VEC_EMB_PATH)
+    dset_root = Path(data_config.NF2VEC_EMB_PATH)
 
-    train_dset = InrEmbeddingNerf(dset_root, dir_config.TRAIN_SPLIT)
+    train_dset = NerfEmbeddings(dset_root, data_config.TRAIN_SPLIT)
     train_loader = DataLoader(train_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    val_dset = InrEmbeddingNerf(dset_root, dir_config.VAL_SPLIT)
+    val_dset = NerfEmbeddings(dset_root, data_config.VAL_SPLIT)
     val_loader = DataLoader(val_dset, batch_size=1, num_workers=0, shuffle=False)
 
-    test_dset = InrEmbeddingNerf(dset_root, dir_config.TEST_SPLIT)
+    test_dset = NerfEmbeddings(dset_root, data_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1, num_workers=0, shuffle=False)
 
     loaders = [train_loader, val_loader, test_loader]
-    splits = [dir_config.TRAIN_SPLIT, dir_config.VAL_SPLIT, dir_config.TEST_SPLIT]
+    splits = [data_config.TRAIN_SPLIT, data_config.VAL_SPLIT, data_config.TEST_SPLIT]
 
-    file_path = dir_config.BLIP2_CAPTIONS_PATH
+    file_path = data_config.BLIP2_CAPTIONS_PATH
 
     data = pd.read_csv(file_path, header=0)
     
@@ -53,20 +47,20 @@ def create_text_embeddings_pairs():
             nerf_embedding=nerf_embedding.squeeze()
             class_id = class_id.squeeze()
             captions = []
-            if 'data_TRAINED_A1' in data_dir[0][2:] or 'data_TRAINED_A2' in data_dir[0][2:]:
+            if "data_TRAINED_A1" in data_dir[0][2:] or "data_TRAINED_A2" in data_dir[0][2:]:
                 continue
 
             data_dir = data_dir[0][2:]
-            l = data_dir.split('/')
-            filtered_data = data[(data['class_id'] == int(l[-2])) & (data['model_id'] == l[-1])]
+            l = data_dir.split("/")
+            filtered_data = data[(data["class_id"] == int(l[-2])) & (data["model_id"] == l[-1])]
                 
             if not filtered_data.empty and len(filtered_data) > 0:
-                captions.append(filtered_data['caption'].values[0])
+                captions.append(filtered_data["caption"].values[0])
             else:
-                captions.append('')
+                captions.append("")
                 notfound+=1
 
-            clip_embedding = create_clip_embedding(captions)
+            clip_embedding = generate_clip_emb(captions)
             output.append((clip_embedding.detach().squeeze().cpu().numpy(),nerf_embedding,data_dir[0],class_id))
             idx += 1
 
@@ -76,11 +70,11 @@ def create_text_embeddings_pairs():
         subsets = [output[i:i + 64] for i in range(0, len(output), 64)]
 
         for i, subset in enumerate(subsets):
-            out_root = Path(dir_config.EMB_TEXT_PATH)
+            out_root = Path(data_config.EMB_TEXT_PATH)
             h5_path = out_root / Path(f"{split}") / f"{i}.h5"
             h5_path.parent.mkdir(parents=True, exist_ok=True)
             
-            with h5py.File(h5_path, 'w') as f:
+            with h5py.File(h5_path, "w") as f:
                 clip_embeddings, nerf_embeddings, data_dirs, class_ids = zip(*subset)
                 clip_embeddings_list = list(clip_embeddings)
                 nerf_embeddings_list = list(nerf_embeddings)
@@ -95,7 +89,15 @@ def create_text_embeddings_pairs():
                 f.create_dataset("data_dir", data=data_dirs_list)
                 f.create_dataset("class_id", data=np.array(class_ids_list))
         print(notfound)
+        
+        
+def generate_clip_emb(text):
+    text = clip.tokenize(text).to(device)
+    with torch.no_grad():
+        clip_embedding = clip_model.encode_text(text)
+
+    return clip_embedding
 
 
 if __name__ == "__main__":
-    create_text_embeddings_pairs()
+    generate_emb_pairs()
