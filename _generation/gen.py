@@ -65,9 +65,7 @@ def gen_from_img():
     ftn.eval()
     ftn.to(device)
 
-    img = Image.open("real_test/domainnet/real/real/airplane/real_002_000001.jpg")
-
-    outputs = ftn(model.encode_image(preprocess(img).unsqueeze(0).to(device)).to(torch.float32))
+    outputs = ftn(clip_embeddings)
     scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32, device=device)
     render_step_size = (
         (scene_aabb[3:] - scene_aabb[:3]).max()
@@ -158,7 +156,8 @@ def gen_from_text(device="cuda"):
     outputs = []
     for emb in text_embs: 
         outputs.append(ftn(torch.from_numpy(emb).to(torch.float32).unsqueeze(0).cuda())) 
-    dir = "./data/data_TRAINED_A2/02933112/aa0280a7d959a18930bbd4cddd04c77b_A2/"
+
+    dir = gen_config.CAMERA_POSE_PATH
 
     for out,caption in tqdm(zip(outputs,gen_config.CAPTIONS)): 
         plots_path = "generation_text/"+ caption
@@ -252,7 +251,7 @@ def gen_from_real():
                 os.path.join(plots_path, f"query.png"),
                 imageio.imread(query)
             )
-            dir = "./data/data_TRAINED_A2/02933112/aa0280a7d959a18930bbd4cddd04c77b_A2/"
+            dir = gen_config.CAMERA_POSE_PATH
             for i in range(4):
                 plot_parmas = retrive_plot_params(dir, i*10)
                 predicted = plot_embeddings(
