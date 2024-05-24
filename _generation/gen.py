@@ -24,7 +24,6 @@ from models.idecoder import ImplicitDecoder
 
 
 def gen_from_img():
-    model, preprocess = clip.load("ViT-B/32")
     with h5py.File(gen_config.H5_TO_GEN, "r") as f:
         nerf_embeddings = np.array(f.get("nerf_embedding"))
         nerf_embeddings = torch.from_numpy(nerf_embeddings).to(torch.float32)     
@@ -58,14 +57,14 @@ def gen_from_img():
     ckpt = torch.load(ckpt_path)
     decoder.load_state_dict(ckpt["decoder"])
 
-    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt_path = gen_config.MODEL_PATH
-    ftn_ckpt = torch.load(ftn_ckpt_path)
-    ftn.load_state_dict(ftn_ckpt["ftn"])
-    ftn.eval()
-    ftn.to(device)
+    fmn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    fmn_ckpt_path = gen_config.MODEL_PATH
+    fmn_ckpt = torch.load(fmn_ckpt_path)
+    fmn.load_state_dict(fmn_ckpt["fmn"])
+    fmn.eval()
+    fmn.to(device)
 
-    outputs = ftn(clip_embeddings)
+    outputs = fmn(clip_embeddings)
     scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32, device=device)
     render_step_size = (
         (scene_aabb[3:] - scene_aabb[:3]).max()
@@ -73,10 +72,9 @@ def gen_from_img():
         / config.GRID_CONFIG_N_SAMPLES
     ).item()
 
-    
-    for emb,out,dir,img_n in tqdm(zip(nerf_embeddings,outputs,data_dirs,img_numbers)): 
+    for emb, out, dir, img_n in tqdm(zip(nerf_embeddings, outputs, data_dirs, img_numbers)): 
         img_name = str(uuid.uuid4())
-        plots_path = "generation_real/"+img_name
+        plots_path = f"generation_real/{img_name}"
         if not os.path.exists(plots_path):
             os.makedirs(plots_path)
 
@@ -95,7 +93,7 @@ def gen_from_img():
             gt = plot_embeddings(emb, "cuda", decoder, plot_parmas, scene_aabb, render_step_size)
 
             if i == 0:
-                gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"00.png")
+                gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, "00.png")
             else:
                 gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"{i*10}.png")
 
@@ -121,15 +119,14 @@ def gen_from_text(device="cuda"):
             text_emb = clip_model.encode_text(text).squeeze().cpu().numpy()
         return text_emb
 
-    
     clip_model, _ = clip.load("ViT-B/32")
-    text_embs = np.asarray([get_text_emb(capt+"on a black background", clip_model) for capt in gen_config.CAPTIONS])
+    text_embs = np.asarray([get_text_emb(f"{capt} on a black background", clip_model) for capt in gen_config.CAPTIONS])
 
-    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt = torch.load(gen_config.MODEL_PATH)
-    ftn.load_state_dict(ftn_ckpt["ftn"])
-    ftn.eval()
-    ftn.to(device)
+    fmn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    fmn_ckpt = torch.load(gen_config.MODEL_PATH)
+    fmn.load_state_dict(fmn_ckpt["fmn"])
+    fmn.eval()
+    fmn.to(device)
     scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32, device=device)
     render_step_size = (
         (scene_aabb[3:] - scene_aabb[:3]).max()
@@ -155,12 +152,12 @@ def gen_from_text(device="cuda"):
     decoder.load_state_dict(ckpt["decoder"])
     outputs = []
     for emb in text_embs: 
-        outputs.append(ftn(torch.from_numpy(emb).to(torch.float32).unsqueeze(0).cuda())) 
+        outputs.append(fmn(torch.from_numpy(emb).to(torch.float32).unsqueeze(0).cuda())) 
 
     dir = gen_config.CAMERA_POSE_PATH
 
-    for out,caption in tqdm(zip(outputs,gen_config.CAPTIONS)): 
-        plots_path = "generation_text/"+ caption
+    for out, caption in tqdm(zip(outputs, gen_config.CAPTIONS)): 
+        plots_path = f"generation_text/{caption}"
         if not os.path.exists(plots_path):
             os.makedirs(plots_path)
 
@@ -195,13 +192,13 @@ def gen_from_real():
     ckpt = torch.load(ckpt_path)
     decoder.load_state_dict(ckpt["decoder"])
 
-    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt_path = data_config.CKPT_COSINE_PATH
+    fmn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    fmn_ckpt_path = data_config.CKPT_COSINE_PATH
 
-    ftn_ckpt = torch.load(ftn_ckpt_path)
-    ftn.load_state_dict(ftn_ckpt["ftn"])
-    ftn.eval()
-    ftn.to(device)
+    fmn_ckpt = torch.load(fmn_ckpt_path)
+    fmn.load_state_dict(fmn_ckpt["fmn"])
+    fmn.eval()
+    fmn.to(device)
 
     test_dir = data_config.DOMAINNET_PATH
     label_map = {
@@ -230,12 +227,12 @@ def gen_from_real():
             selected_files[category] = [os.path.join(category_dir, file) for file in file_list[:2]]
 
     for category, files in selected_files.items():
-        k=0
+        k = 0
         for file in files:
             query = file
             img = Image.open(query)
 
-            outputs = ftn(model.encode_image(preprocess(img).unsqueeze(0).to(device)).to(torch.float32))
+            outputs = fmn(model.encode_image(preprocess(img).unsqueeze(0).to(device)).to(torch.float32))
             scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32, device=device)
             render_step_size = (
                 (scene_aabb[3:] - scene_aabb[:3]).max()
@@ -243,12 +240,12 @@ def gen_from_real():
                 / config.GRID_CONFIG_N_SAMPLES
             ).item()
 
-            plots_path = "generation_real/"+category+str(k)
+            plots_path = f"generation_real/{category}{k}"
             if not os.path.exists(plots_path):
                 os.makedirs(plots_path)
 
             imageio.imwrite(
-                os.path.join(plots_path, f"query.png"),
+                os.path.join(plots_path, "query.png"),
                 imageio.imread(query)
             )
             dir = gen_config.CAMERA_POSE_PATH
@@ -266,7 +263,7 @@ def gen_from_real():
                     os.path.join(plots_path, f"{i}_out.png"),
                     predicted
                 )
-            k+=1
+            k += 1
 
 
 if __name__ == "__main__":
