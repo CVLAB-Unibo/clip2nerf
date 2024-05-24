@@ -1,28 +1,31 @@
 import sys
 sys.path.append("..")
 
-import os
 import math
-import uuid
-import h5py
-import clip
-import torch
+import os
 import random
+import uuid
+
+import clip
+import h5py
+import imageio.v2 as imageio
 import numpy as np
+import torch
 from PIL import Image
 from tqdm import tqdm
-import imageio.v2 as imageio
-from _dataset import dir_config
-from classification import config
-from _generate import gen_confing
-from models.idecoder import ImplicitDecoder
+
+from _dataset import data_config
 from _feature_mapping import network_config
 from _feature_mapping.fmn import FeatureMappingNetwork
 from _feature_mapping.utils import plot_embeddings, retrive_plot_params
+from _generation import gen_config
+from classification import config
+from models.idecoder import ImplicitDecoder
+
 
 def gen_from_img():
     model, preprocess = clip.load("ViT-B/32")
-    with h5py.File(gen_confing.H5_TO_GEN, "r") as f:
+    with h5py.File(gen_config.H5_TO_GEN, "r") as f:
         nerf_embeddings = np.array(f.get("nerf_embedding"))
         nerf_embeddings = torch.from_numpy(nerf_embeddings).to(torch.float32)     
         clip_embeddings = np.array(f.get("clip_embedding"))
@@ -31,7 +34,6 @@ def gen_from_img():
         data_dirs = f["data_dir"][()]
         data_dirs = [item.decode("utf-8") for item in data_dirs]
         
-
         class_ids = np.array(f.get("class_id"))
         class_ids = torch.from_numpy(class_ids)
 
@@ -52,12 +54,12 @@ def gen_from_img():
     decoder.eval()
     decoder = decoder.to(device)
 
-    ckpt_path = dir_config.NF2VEC_CKPT_PATH
+    ckpt_path = data_config.NF2VEC_CKPT_PATH
     ckpt = torch.load(ckpt_path)
     decoder.load_state_dict(ckpt["decoder"])
 
     ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt_path = gen_confing.MODEL_PATH
+    ftn_ckpt_path = gen_config.MODEL_PATH
     ftn_ckpt = torch.load(ftn_ckpt_path)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
@@ -76,17 +78,17 @@ def gen_from_img():
     
     for emb,out,dir,img_n in tqdm(zip(nerf_embeddings,outputs,data_dirs,img_numbers)): 
         img_name = str(uuid.uuid4())
-        plots_path = 'generation_real/'+img_name
+        plots_path = "generation_real/"+img_name
         if not os.path.exists(plots_path):
             os.makedirs(plots_path)
 
         if img_n < 10:
-            query = os.path.join(dir_config.NF2VEC_DATA_PATH, dir[2:], dir_config.TRAIN_SPLIT, f"0{img_n}.png")
+            query = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"0{img_n}.png")
         else:
-            query = os.path.join(dir_config.NF2VEC_DATA_PATH, dir[2:], dir_config.TRAIN_SPLIT, f"{img_n}.png")
+            query = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"{img_n}.png")
 
         imageio.imwrite(
-            os.path.join(plots_path, f'{img_n}_query.png'),
+            os.path.join(plots_path, f"{img_n}_query.png"),
             imageio.imread(query)
         )
         for i in range(4):
@@ -95,20 +97,20 @@ def gen_from_img():
             gt = plot_embeddings(emb, "cuda", decoder, plot_parmas, scene_aabb, render_step_size)
 
             if i == 0:
-                gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, dir[2:], dir_config.TRAIN_SPLIT, f"00.png")
+                gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"00.png")
             else:
-                gt_path = os.path.join(dir_config.NF2VEC_DATA_PATH, dir[2:], dir_config.TRAIN_SPLIT, f"{i*10}.png")
+                gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"{i*10}.png")
 
             imageio.imwrite(
-                os.path.join(plots_path, f'{i}_gt.png'),
+                os.path.join(plots_path, f"{i}_gt.png"),
                 imageio.imread(gt_path)
             )
             imageio.imwrite(
-                os.path.join(plots_path, f'{i}_dec.png'),
+                os.path.join(plots_path, f"{i}_dec.png"),
                 gt
             )
             imageio.imwrite(
-                os.path.join(plots_path, f'{i}_out.png'),
+                os.path.join(plots_path, f"{i}_out.png"),
                 predicted
             )
         exit(0)
@@ -123,10 +125,10 @@ def gen_from_text(device="cuda"):
 
     
     clip_model, _ = clip.load("ViT-B/32")
-    text_embs = np.asarray([get_text_emb(capt+"on a black background", clip_model) for capt in gen_confing.CAPTIONS])
+    text_embs = np.asarray([get_text_emb(capt+"on a black background", clip_model) for capt in gen_config.CAPTIONS])
 
     ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt = torch.load(gen_confing.MODEL_PATH)
+    ftn_ckpt = torch.load(gen_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
     ftn.to(device)
@@ -150,7 +152,7 @@ def gen_from_text(device="cuda"):
     decoder.eval()
     decoder = decoder.to(device)
 
-    ckpt_path = dir_config.NF2VEC_CKPT_PATH
+    ckpt_path = data_config.NF2VEC_CKPT_PATH
     ckpt = torch.load(ckpt_path)
     decoder.load_state_dict(ckpt["decoder"])
     outputs = []
@@ -158,8 +160,8 @@ def gen_from_text(device="cuda"):
         outputs.append(ftn(torch.from_numpy(emb).to(torch.float32).unsqueeze(0).cuda())) 
     dir = "./data/data_TRAINED_A2/02933112/aa0280a7d959a18930bbd4cddd04c77b_A2/"
 
-    for out,caption in tqdm(zip(outputs,gen_confing.CAPTIONS)): 
-        plots_path = 'generation_text/'+ caption
+    for out,caption in tqdm(zip(outputs,gen_config.CAPTIONS)): 
+        plots_path = "generation_text/"+ caption
         if not os.path.exists(plots_path):
             os.makedirs(plots_path)
 
@@ -167,7 +169,7 @@ def gen_from_text(device="cuda"):
             plot_parmas = retrive_plot_params(dir, i*10)
             predicted = plot_embeddings(out.squeeze(0), "cuda", decoder, plot_parmas, scene_aabb, render_step_size)
             imageio.imwrite(
-                os.path.join(plots_path, f'{i}_out.png'),
+                os.path.join(plots_path, f"{i}_out.png"),
                 predicted
             )
 
@@ -189,20 +191,20 @@ def gen_from_real():
     decoder.eval()
     decoder = decoder.to(device)
 
-    ckpt_path = dir_config.NF2VEC_CKPT_PATH
+    ckpt_path = data_config.NF2VEC_CKPT_PATH
 
     ckpt = torch.load(ckpt_path)
     decoder.load_state_dict(ckpt["decoder"])
 
     ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt_path = dir_config.CKPT_COSINE_PATH
+    ftn_ckpt_path = data_config.CKPT_COSINE_PATH
 
     ftn_ckpt = torch.load(ftn_ckpt_path)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
     ftn.to(device)
 
-    test_dir = dir_config.DOMAINNET_PATH
+    test_dir = data_config.DOMAINNET_PATH
     label_map = {
         "airplane": 0,
         "bench": 1,
@@ -220,7 +222,7 @@ def gen_from_real():
     }
     selected_files = {}
 
-    for category, label in label_map.items():
+    for category in label_map.keys():
         category_dir = os.path.join(test_dir, category)
         
         if os.path.isdir(category_dir):
@@ -242,29 +244,36 @@ def gen_from_real():
                 / config.GRID_CONFIG_N_SAMPLES
             ).item()
 
-            plots_path = 'generation_real/'+category+str(k)
+            plots_path = "generation_real/"+category+str(k)
             if not os.path.exists(plots_path):
                 os.makedirs(plots_path)
 
             imageio.imwrite(
-                os.path.join(plots_path, f'query.png'),
+                os.path.join(plots_path, f"query.png"),
                 imageio.imread(query)
             )
             dir = "./data/data_TRAINED_A2/02933112/aa0280a7d959a18930bbd4cddd04c77b_A2/"
             for i in range(4):
                 plot_parmas = retrive_plot_params(dir, i*10)
-                predicted = plot_embeddings(outputs.squeeze(0), "cuda", decoder, plot_parmas, scene_aabb, render_step_size)
-
+                predicted = plot_embeddings(
+                    outputs.squeeze(0), 
+                    "cuda", 
+                    decoder, 
+                    plot_parmas, 
+                    scene_aabb, 
+                    render_step_size
+                )
                 imageio.imwrite(
-                    os.path.join(plots_path, f'{i}_out.png'),
+                    os.path.join(plots_path, f"{i}_out.png"),
                     predicted
                 )
             k+=1
 
-if __name__=="main":
-    if gen_confing.MODE == "img":
+
+if __name__ == "__main__":
+    if gen_config.MODE == "img":
         gen_from_img()
-    if gen_confing.MODE == "text":
+    elif gen_config.MODE == "text":
         gen_from_text()
-    if gen_confing.MODE == "real":
+    else:
         gen_from_real()
