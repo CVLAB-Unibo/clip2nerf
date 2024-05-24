@@ -27,7 +27,7 @@ logging.disable(logging.INFO)
 os.environ["WANDB_SILENT"] = "true"
 
 
-class Clip2NerfDataset(Dataset):
+class Nerf2ClipDataset(Dataset):
     def __init__(self, root: Path, split: str) -> None:
         super().__init__()
 
@@ -53,13 +53,13 @@ class FMNTrainer:
         self.log = log
 
         # data are already batched
-        train_dset = Clip2NerfDataset(dset_root, data_config.TRAIN_SPLIT)
+        train_dset = Nerf2ClipDataset(dset_root, data_config.TRAIN_SPLIT)
         self.train_loader = DataLoader(train_dset, batch_size=1, num_workers=4, prefetch_factor=4, shuffle=True)
 
-        val_dset = Clip2NerfDataset(dset_root, data_config.VAL_SPLIT)
+        val_dset = Nerf2ClipDataset(dset_root, data_config.VAL_SPLIT)
         self.val_loader = DataLoader(val_dset, batch_size=1, num_workers=4)
 
-        test_dset = Clip2NerfDataset(dset_root, data_config.TEST_SPLIT)
+        test_dset = Nerf2ClipDataset(dset_root, data_config.TEST_SPLIT)
         self.test_loader = DataLoader(test_dset, batch_size=1, num_workers=4)
 
         model = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)

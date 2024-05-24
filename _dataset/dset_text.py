@@ -10,8 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from _dataset import data_config
-from _dataset.emb import NerfEmbeddings
-from _dataset.utils import generate_clip_emb_text
+from _dataset.utils import generate_clip_emb_text, NerfEmbeddings
 
 
 def generate_emb_pairs():

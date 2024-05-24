@@ -1,79 +1,41 @@
 import sys
 sys.path.append("..")
 
-from collections import defaultdict
 import math
 import os
 import time
 import uuid
-from nerfacc import OccupancyGrid
-import pandas as pd
-import clip
-from PIL import Image
-from _feature_mapping import network_config
-from tqdm import tqdm
-from _feature_mapping.utils import retrive_plot_params
-import h5py
-from _retrieval import retrieval_config
-from sklearn.neighbors import NearestNeighbors
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List
 
+import clip
+import imageio.v2 as imageio
 import numpy as np
-
+import pandas as pd
 import torch
+from nerfacc import OccupancyGrid
+from PIL import Image
+from sklearn.neighbors import NearestNeighbors
 from torch import Tensor
-from torch.utils.data import Dataset
+from torch.cuda.amp import autocast
+from tqdm import tqdm
+
 from _dataset import data_config
-
-from classification import config
-
+from _feature_mapping import network_config
 from _feature_mapping.fmn import FeatureMappingNetwork
-
+from _feature_mapping.utils import retrive_plot_params
+from _retrieval import retrieval_config
+from _retrieval.utils import EmbeddingPairs
+from classification import config
 from models.idecoder import ImplicitDecoder
 from nerf.intant_ngp import NGPradianceField
 from nerf.utils import Rays, render_image, render_image_GT
 
-import imageio.v2 as imageio
-from torch.cuda.amp import autocast
-
-
-
-class EmbeddingDataset(Dataset):
-    def __init__(self, root: Path, split: str) -> None:
-        super().__init__()
-
-        self.root = root / split
-        self.item_paths = sorted(self.root.glob("*.h5"), key=lambda x: int(x.stem))
-
-    def __len__(self) -> int:
-        return len(self.item_paths)
-
-    def __getitem__(self, index: int):
-        with h5py.File(self.item_paths[index], "r") as f:
-
-            nerf_embeddings = np.array(f.get("nerf_embedding"))
-            nerf_embeddings = torch.from_numpy(nerf_embeddings).to(torch.float32)     
-            clip_embeddings = np.array(f.get("clip_embedding"))
-            clip_embeddings = torch.from_numpy(clip_embeddings).to(torch.float32)
-            
-            data_dirs = f["data_dir"][()]
-            data_dirs = [item.decode("utf-8") for item in data_dirs]
-            
-
-            class_ids = np.array(f.get("class_id"))
-            class_ids = torch.from_numpy(class_ids)
-
-            #img_numbers = np.array(f.get("img_number"))
-            #img_numbers = torch.from_numpy(img_numbers)
-
-        return nerf_embeddings, clip_embeddings, data_dirs, class_ids#, img_numbers
 
 @torch.no_grad()
-def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
-    #data_dirs = [item[0].decode('utf-8') for item in data_dirs]
-
-    scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32, device=device)
+def draw_images(decoder, embeddings, outputs, data_dirs):
+    scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32, device="cuda")
     render_step_size = (
         (scene_aabb[3:] - scene_aabb[:3]).max()
         * math.sqrt(3)
@@ -84,47 +46,45 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
     resolution=config.GRID_RESOLUTION,
     contraction_type=config.GRID_CONTRACTION_TYPE,
     )
-    occupancy_grid = occupancy_grid.to(device)
+    occupancy_grid = occupancy_grid.to("cuda")
     occupancy_grid.eval()
 
-    ngp_mlp = NGPradianceField(**config.INSTANT_NGP_MLP_CONF).to(device)
+    ngp_mlp = NGPradianceField(**config.INSTANT_NGP_MLP_CONF).to("cuda")
     ngp_mlp.eval()
     
     img_name = str(uuid.uuid4())
     idx = 0
 
-    plots_path = 'retrieval_plots/'+img_name
+    plots_path = f"retrieval_plots/{img_name}"
     if not os.path.exists(plots_path):
         os.makedirs(plots_path)
 
-    for emb,out,dir in zip(embeddings,outputs,data_dirs):
-        
+    for emb, out, dir in zip(embeddings, outputs, data_dirs):
         path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:])
 
         weights_file_path = os.path.join(path, "nerf_weights.pth")  
-        mlp_weights = torch.load(weights_file_path, map_location=torch.device(device))
+        mlp_weights = torch.load(weights_file_path, map_location="cuda")
         
-        mlp_weights['mlp_base.params'] = [mlp_weights['mlp_base.params']]
+        mlp_weights["mlp_base.params"] = [mlp_weights["mlp_base.params"]]
 
-        grid_weights_path = os.path.join(path, 'grid.pth')  
-        grid_weights = torch.load(grid_weights_path, map_location=device)
-        grid_weights['_binary'] = grid_weights['_binary'].to_dense()
+        grid_weights_path = os.path.join(path, "grid.pth")  
+        grid_weights = torch.load(grid_weights_path, map_location="cuda")
+        grid_weights["_binary"] = grid_weights["_binary"].to_dense()
         n_total_cells = 884736
-        grid_weights['occs'] = torch.empty([n_total_cells]) 
+        grid_weights["occs"] = torch.empty([n_total_cells]) 
 
-        grid_weights['occs'] = [grid_weights['occs']] 
-        grid_weights['_binary'] = [grid_weights['_binary']]
-        grid_weights['_roi_aabb'] = [grid_weights['_roi_aabb']] 
-        grid_weights['resolution'] = [grid_weights['resolution']]
+        grid_weights["occs"] = [grid_weights["occs"]] 
+        grid_weights["_binary"] = [grid_weights["_binary"]]
+        grid_weights["_roi_aabb"] = [grid_weights["_roi_aabb"]] 
+        grid_weights["resolution"] = [grid_weights["resolution"]]
 
-        emb = torch.tensor(emb, device=device, dtype=torch.float32)
+        emb = torch.tensor(emb, device="cuda", dtype=torch.float32)
         emb = emb.unsqueeze(dim=0)
-        out = torch.tensor(out, device=device, dtype=torch.float32)
+        out = torch.tensor(out, device="cuda", dtype=torch.float32)
         out = out.unsqueeze(dim=0)
 
-        for i in range(3):#tre viste
+        for i in range(3):
             plot_parmas = retrive_plot_params(path, i*10)
-            #color_bkgd = torch.ones((1,3), device=device).unsqueeze(0)
             color_bkgd = plot_parmas["color_bkgd"].unsqueeze(0)
             
             rays = plot_parmas["rays"]
@@ -135,7 +95,7 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
             rays = rays._replace(origins=rays.origins.cuda(), viewdirs=rays.viewdirs.cuda())
 
             with autocast():
-                pixels, alpha, filtered_rays = render_image_GT(
+                pixels, alpha, _ = render_image_GT(
                             radiance_field=ngp_mlp, 
                             occupancy_grid=occupancy_grid, 
                             rays=rays, 
@@ -144,10 +104,10 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
                             color_bkgds=color_bkgd,
                             grid_weights=grid_weights,
                             ngp_mlp_weights=mlp_weights,
-                            device=device)
+                            device="cuda")
                 rgb_nerf = pixels * alpha + color_bkgd.unsqueeze(1) * (1.0 - alpha)
 
-                rgb_dec, alpha, b, c, _, _ = render_image(
+                rgb_dec, alpha, _, _, _, _ = render_image(
                                 radiance_field=decoder,
                                 embeddings=emb,
                                 occupancy_grid=None,
@@ -157,7 +117,7 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
                                 render_bkgd=color_bkgd,
                                 grid_weights=None
                 )
-                rgb_out, alpha, b, c, _, _ = render_image(
+                rgb_out, alpha, _, _, _, _ = render_image(
                                 radiance_field=decoder,
                                 embeddings=out,
                                 occupancy_grid=None,
@@ -173,55 +133,52 @@ def draw_images(decoder, embeddings, outputs, data_dirs, device='cuda:0'):
                 gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"{i*10}.png")
 
             imageio.imwrite(
-                os.path.join(plots_path, f'{idx}_{i}_gt.png'),
+                os.path.join(plots_path, f"{idx}_{i}_gt.png"),
                 imageio.imread(gt_path)
             )
             imageio.imwrite(
-                os.path.join(plots_path, f'{idx}_{i}_nerf.png'),
+                os.path.join(plots_path, f"{idx}_{i}_nerf.png"),
                 (rgb_nerf.squeeze(dim=0).cpu().detach().numpy() * 255).astype(np.uint8)
             )
             imageio.imwrite(
-                os.path.join(plots_path, f'{idx}_{i}_dec.png'),
+                os.path.join(plots_path, f"{idx}_{i}_dec.png"),
                 (rgb_dec.squeeze(dim=0).cpu().detach().numpy() * 255).astype(np.uint8)
             )
             imageio.imwrite(
-                os.path.join(plots_path, f'{idx}_{i}_out.png'),
+                os.path.join(plots_path, f"{idx}_{i}_out.png"),
                 (rgb_out.squeeze(dim=0).cpu().detach().numpy() * 255).astype(np.uint8)
             )
-        idx+=1
+        idx += 1
+
 
 @torch.no_grad()
 def draw_images_tesi(data_dirs, d):
-    
     img_name = str(uuid.uuid4())
-
-    plots_path = 'retrieval_plots/'+img_name
+    
+    plots_path = f"retrieval_plots/{img_name}"
     if not os.path.exists(plots_path):
         os.makedirs(plots_path)
 
-
     gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, d[2:], data_config.TRAIN_SPLIT, f"00.png")
-
     imageio.imwrite(
-        os.path.join(plots_path, f'query.png'),
+        os.path.join(plots_path, f"query.png"),
         imageio.imread(gt_path)
     )
+    
     i = 0
     for dir in data_dirs:
-
-        
         gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"00.png")
-
         imageio.imwrite(
-            os.path.join(plots_path, f'{i}_gt.png'),
+            os.path.join(plots_path, f"{i}_gt.png"),
             imageio.imread(gt_path)
         )
-        i+=1
+        i += 1
+
 
 @torch.no_grad()
 def draw_text_query(data_dirs, query_dir, n, label):
-    data_dirs = [item[0].decode('utf-8') for item in data_dirs]
-    query_dir = query_dir[0].decode('utf-8')
+    data_dirs = [item[0].decode("utf-8") for item in data_dirs]
+    query_dir = query_dir[0].decode("utf-8")
     
     idx = 0
 
@@ -230,57 +187,66 @@ def draw_text_query(data_dirs, query_dir, n, label):
 
     query_dir = query_dir[2:]
     dir = query_dir
-    if query_dir.endswith('_A1') or query_dir.endswith('_A2'):
+    if query_dir.endswith("_A1") or query_dir.endswith("_A2"):
         dir = query_dir[:-3]
-    list = dir.split('/')
-    filtered_data = data[(data['class_id'] == int(list[-2])) & (data['model_id'] == list[-1])]
+    list = dir.split("/")
+    filtered_data = data[(data["class_id"] == int(list[-2])) & (data["model_id"] == list[-1])]
 
-    plots_path = 'retrieval_plots_text/' + filtered_data['caption'].values[0] + " " + str(n) + " " + str(label)
+    plots_path = f"retrieval_plots_text/{filtered_data["caption"].values[0]}_{n}_{label}"
     if not os.path.exists(plots_path):
         os.makedirs(plots_path)
     
     gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, query_dir, data_config.TRAIN_SPLIT, f"00.png")
     imageio.imwrite(
-            os.path.join(plots_path, f'query.png'),
-            imageio.imread(gt_path)
-        )
+        os.path.join(plots_path, f"query.png"),
+        imageio.imread(gt_path)
+    )
 
     for dir in zip(data_dirs):
         dir = dir[0][2:]
-
         gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir, data_config.TRAIN_SPLIT, f"00.png")
-
         imageio.imwrite(
-            os.path.join(plots_path, f'{idx}_gt.png'),
+            os.path.join(plots_path, f"{idx}_gt.png"),
             imageio.imread(gt_path)
         )
+        idx += 1
 
-        idx+=1
 
 @torch.no_grad()
 def draw_real_retrieval(data_dirs, query_img):
     img_name = str(uuid.uuid4())
-    plots_path = 'retrieval_real_plots/'+img_name
+    
+    plots_path = f"retrieval_real_plots/{img_name}"
     if not os.path.exists(plots_path):
         os.makedirs(plots_path)
+    
     idx = 0
     for dir in data_dirs:
         dir = dir[2:]
-        
         gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir, data_config.TRAIN_SPLIT, f"00.png")
         imageio.imwrite(
-                os.path.join(plots_path, f'{idx}_gt.png'),
-                imageio.imread(gt_path)
-            )
-        idx+=1
+            os.path.join(plots_path, f"{idx}_gt.png"),
+            imageio.imread(gt_path)
+        )
+        idx += 1
     imageio.imwrite(
-                os.path.join(plots_path, 'query.png'),
-                imageio.imread(query_img)
-            )
+        os.path.join(plots_path, "query.png"),
+        imageio.imread(query_img)
+    )
 
 
 @torch.no_grad()
-def get_recalls(gallery: Tensor, outputs: Tensor, labels_gallery: Tensor, data_dirs: List, kk: List[int], decoder, multiview, draw, mean) -> Dict[int, float]:
+def get_recalls(
+        gallery: Tensor, 
+        outputs: Tensor, 
+        labels_gallery: Tensor, 
+        data_dirs: List, 
+        kk: List[int], 
+        decoder, 
+        multiview, 
+        draw, 
+        mean
+    ) -> Dict[int, float]:
     max_nn = max(kk)
     recalls = {idx: 0.0 for idx in kk}
     targets = labels_gallery.cpu().numpy()
@@ -290,53 +256,51 @@ def get_recalls(gallery: Tensor, outputs: Tensor, labels_gallery: Tensor, data_d
     if not multiview:
         outputs = outputs.reshape(-1, 1024)
         
-    from sklearn.neighbors import NearestNeighbors
     nn = NearestNeighbors(n_neighbors=max_nn+1, metric="cosine")
     nn.fit(gallery)
 
     dic_renderings = defaultdict(int)
-
     for query, label_query, d in zip(outputs, targets, data_dirs):
         if multiview and mean:
             query = np.mean(query, axis=0)
         
         _, indices_matched = nn.kneighbors(query, n_neighbors=max_nn+1)
 
-
         if draw:
             label_query_tuple = tuple(label_query)
             if dic_renderings[label_query_tuple] < 2:
                 dic_renderings[label_query_tuple] += 1
-                draw_images(decoder, gallery[indices_matched], outputs[indices_matched], np.array(data_dirs)[indices_matched])
+                draw_images(
+                    decoder, 
+                    gallery[indices_matched], 
+                    outputs[indices_matched], 
+                    np.array(data_dirs)[indices_matched]
+                )
 
         for k in kk:
             indices_matched_temp = indices_matched[0:k]
             classes_matched = targets[indices_matched_temp]
             recalls[k] += np.count_nonzero(classes_matched == label_query) > 0
 
-            
-
     for key, value in recalls.items():
         recalls[key] = value / (1.0 * len(gallery))
 
     return recalls
 
-@torch.no_grad()
-def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , device='cuda:0'):
 
+@torch.no_grad()
+def retrieval(n_view = 1, mean=False, draw=False):
     multiview = n_view > 1
 
-    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
-    ftn.load_state_dict(ftn_ckpt["ftn"])
-    ftn.eval()
-    ftn.to(device)
+    fmn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    fmn_ckpt = torch.load(retrieval_config.MODEL_PATH)
+    fmn.load_state_dict(fmn_ckpt["fmn"])
+    fmn.eval()
+    fmn.cuda()
     
     dset_root = Path(retrieval_config.GALLERY_PATH)
-    dset = EmbeddingDataset(dset_root, retrieval_config.DATASET_SPLIT)
+    dset = EmbeddingPairs(dset_root, retrieval_config.DATASET_SPLIT)
 
-
-    # Init nerf2vec 
     decoder = ImplicitDecoder(
             embed_dim=config.ENCODER_EMBEDDING_DIM,
             in_dim=config.DECODER_INPUT_DIM,
@@ -345,10 +309,10 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
             num_hidden_layers_after_skip=config.DECODER_NUM_HIDDEN_LAYERS_AFTER_SKIP,
             out_dim=config.DECODER_OUT_DIM,
             encoding_conf=config.INSTANT_NGP_ENCODING_CONF,
-            aabb=torch.tensor(config.GRID_AABB, dtype=torch.float32, device=device)
+            aabb=torch.tensor(config.GRID_AABB, dtype=torch.float32, device="cuda")
         )
     decoder.eval()
-    decoder = decoder.to(device)
+    decoder = decoder.cuda()
 
     ckpt = torch.load(data_config.NF2VEC_CKPT_PATH)
     decoder.load_state_dict(ckpt["decoder"])
@@ -363,11 +327,10 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
     occurrences = defaultdict(int)
 
     embedding_dict = {}
-    print(len(dset))
     for i in range(len(dset)):
         embedding, clip, data_dir, label = dset[i]
-        output = ftn(clip.to(device))
-        # Divido lungo la dimensione 0
+        output = fmn(clip.cuda())
+        
         embedding_list = torch.split(embedding, 1) 
         output_list = torch.split(output, 1) 
         label_list = torch.split(label, 1)
@@ -382,25 +345,33 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
                 outputs.append(out)
                 labels.append(lab)
                 data_dirs.append(dir)
-                embedding_dict[hash(emb_tuple)] = len(embeddings) - 1  # Memorizzo l'indice dell'embedding nel dizionario
+                embedding_dict[hash(emb_tuple)] = len(embeddings) - 1
             elif multiview:
                 if occurrences[emb_tuple] < n_view:
                     occurrences[emb_tuple] += 1
                     emb_hash = hash(emb_tuple)
-                    emb_index = embedding_dict[emb_hash]  # Ottengo l'indice dal dizionario
+                    emb_index = embedding_dict[emb_hash]
                     outputs[emb_index] = torch.cat((outputs[emb_index], out), dim=0)
 
     embeddings = torch.stack(embeddings)
     outputs = torch.stack(outputs)
     labels = torch.stack(labels)
     
-    recalls = get_recalls_nerf_excluded(embeddings, outputs, labels, data_dirs, [1, 5, 10], decoder, multiview, draw, mean)
+    recalls = get_recalls_nerf_excluded(embeddings, outputs, labels, data_dirs, [1, 5, 10], multiview, draw, mean)
     
     for key, value in recalls.items():
         print(f"Recall@{key} : {100. * value:.2f}%")
 
+
 @torch.no_grad()
-def get_recalls_true_imgs(gallery: Tensor, outputs: Tensor, labels_gallery: Tensor, data_dirs: List, kk: List[int], draw) -> Dict[int, float]:
+def get_recalls_true_imgs(
+        gallery: Tensor, 
+        outputs: Tensor, 
+        labels_gallery: Tensor, 
+        data_dirs: List, 
+        kk: List[int], 
+        draw
+    ) -> Dict[int, float]:
     max_nn = max(kk)
     recalls = {idx: 0.0 for idx in kk}
     targets = labels_gallery.cpu().numpy()
@@ -417,12 +388,12 @@ def get_recalls_true_imgs(gallery: Tensor, outputs: Tensor, labels_gallery: Tens
     nn.fit(gallery)
 
     dic_renderings = defaultdict(int)
-
-    print("Inizio test")
+    
     for query, label_query, img in zip(outputs_tensor,label_query,imgs):
         query = np.expand_dims(query, 0)
         _, indices_matched = nn.kneighbors(query, n_neighbors=max_nn+1)
         indices_matched = indices_matched[0]
+        
         if draw:
             if dic_renderings[label_query] < 2:
                 dic_renderings[label_query] += 1
@@ -438,18 +409,18 @@ def get_recalls_true_imgs(gallery: Tensor, outputs: Tensor, labels_gallery: Tens
 
     return recalls
 
-@torch.no_grad()
-def retrieval_true_imgs(draw = False , device='cuda:0'):
 
-    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+@torch.no_grad()
+def retrieval_true_imgs(draw=False):
+    fmn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
 
     ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
-    ftn.load_state_dict(ftn_ckpt["ftn"])
-    ftn.eval()
-    ftn.to(device)
+    fmn.load_state_dict(ftn_ckpt["fmn"])
+    fmn.eval()
+    fmn.cuda()
     
     dset_root = Path(retrieval_config.GALLERY_PATH)
-    dset = EmbeddingDataset(dset_root, retrieval_config.DATASET_SPLIT)
+    dset = EmbeddingPairs(dset_root, retrieval_config.DATASET_SPLIT)
 
     seen_embeddings = set()
 
@@ -457,7 +428,6 @@ def retrieval_true_imgs(draw = False , device='cuda:0'):
     outputs = []
     labels = []
     data_dirs = []
-
 
     for i in tqdm(range(len(dset))):
         embedding, _, data_dir, label = dset[i]
@@ -473,10 +443,7 @@ def retrieval_true_imgs(draw = False , device='cuda:0'):
                 embeddings.append(emb)
                 labels.append(lab)
                 data_dirs.append(dir)
-    
-    print("Gallery caricata",len(embeddings))
 
-    
     test_dir = data_config.DOMAINNET_PATH
     label_map = {
         "airplane": 0,
@@ -494,8 +461,7 @@ def retrieval_true_imgs(draw = False , device='cuda:0'):
         "speedboat": 12
     }
 
-    
-    clip_model, preprocess = clip.load("ViT-B/32", device=device)
+    clip_model, preprocess = clip.load("ViT-B/32", device="cuda")
 
     for d in os.listdir(test_dir):
         dir_path = os.path.join(test_dir, d)
@@ -504,18 +470,16 @@ def retrieval_true_imgs(draw = False , device='cuda:0'):
             if label == 100:
                 continue
 
-            for immagine_nome in os.listdir(dir_path):
-                img_path = os.path.join(dir_path, immagine_nome)
+            for img_name in os.listdir(dir_path):
+                img_path = os.path.join(dir_path, img_name)
 
-                if os.path.isfile(img_path) and immagine_nome.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    image = preprocess(Image.open(img_path)).unsqueeze(0).to(device)
+                if os.path.isfile(img_path) and img_name.lower().endswith((".png", ".jpg", ".jpeg")):
+                    image = preprocess(Image.open(img_path)).unsqueeze(0).cuda()
                     with torch.no_grad():
                         image_features = clip_model.encode_image(image)
-                        out = ftn(image_features.to(torch.float32))
+                        out = fmn(image_features.to(torch.float32))
 
                     outputs.append((out.cpu().numpy(),label,img_path))
-
-    print("Immagini di testing caricate",len(outputs))
 
     embeddings = torch.stack(embeddings)
     labels = torch.stack(labels)
@@ -525,8 +489,18 @@ def retrieval_true_imgs(draw = False , device='cuda:0'):
     for key, value in recalls.items():
         print(f"Recall@{key} : {100. * value:.2f}%")
 
+
 @torch.no_grad()
-def get_recalls_nerf_excluded(gallery: Tensor, outputs: Tensor, labels_gallery: Tensor, data_dirs: List, kk: List[int], decoder, multiview, draw, mean) -> Dict[int, float]:
+def get_recalls_nerf_excluded(
+        gallery: Tensor, 
+        outputs: Tensor, 
+        labels_gallery: Tensor, 
+        data_dirs: List, 
+        kk: List[int], 
+        multiview, 
+        draw, 
+        mean
+    ) -> Dict[int, float]:
     max_nn = max(kk)
     recalls = {idx: 0.0 for idx in kk}
     targets = labels_gallery.cpu().numpy()
@@ -541,7 +515,7 @@ def get_recalls_nerf_excluded(gallery: Tensor, outputs: Tensor, labels_gallery: 
 
     dic_renderings = defaultdict(int)
 
-    for query,g,label_query,d in tqdm(zip(outputs,gallery,targets,data_dirs), desc="KNN search", ncols=100):
+    for query, g, label_query, d in tqdm(zip(outputs, gallery, targets, data_dirs), desc="KNN search"):
         if multiview and mean:
             query = np.mean(query, axis=0)
             query = np.expand_dims(query, 0)
@@ -569,25 +543,24 @@ def get_recalls_nerf_excluded(gallery: Tensor, outputs: Tensor, labels_gallery: 
             classes_matched = targets[indices_matched_temp]
             recalls[k] += np.count_nonzero(classes_matched == label_query) > 0
 
-
     for key, value in recalls.items():
         recalls[key] = value / (1.0 * len(gallery))
 
     return recalls
 
+
 @torch.no_grad()
-def retrieval_times_memory(device = "cuda"):
+def retrieval_times_memory():
+    clip_model, preprocess = clip.load("ViT-B/32", device="cuda")
 
-    clip_model, preprocess = clip.load("ViT-B/32", device=device)
-
-    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
-    ftn.load_state_dict(ftn_ckpt["ftn"])
-    ftn.eval()
-    ftn.to(device)
+    fmn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    fmn_ckpt = torch.load(retrieval_config.MODEL_PATH)
+    fmn.load_state_dict(fmn_ckpt["fmn"])
+    fmn.eval()
+    fmn.cuda()
     
     dset_root = Path(retrieval_config.GALLERY_PATH)
-    dset = EmbeddingDataset(dset_root, retrieval_config.DATASET_SPLIT)
+    dset = EmbeddingPairs(dset_root, retrieval_config.DATASET_SPLIT)
 
     seen_embeddings = set()
 
@@ -598,7 +571,7 @@ def retrieval_times_memory(device = "cuda"):
 
     for i in range(len(dset)):
         embedding, clip_emb, data_dir, label = dset[i]
-        # Divido lungo la dimensione 0
+
         embedding_list = torch.split(embedding, 1) 
         clip_emb_list = torch.split(clip_emb, 1) 
         label_list = torch.split(label, 1)
@@ -608,11 +581,11 @@ def retrieval_times_memory(device = "cuda"):
             
             if emb_tuple not in seen_embeddings:
                 seen_embeddings.add(emb_tuple)
+            
             embeddings.append(emb)
             clip_embs.append(c)
             labels.append(lab)
             data_dirs.append(dir)
-
 
     embeddings = torch.stack(embeddings)
     clip_embs = torch.stack(clip_embs)
@@ -620,28 +593,26 @@ def retrieval_times_memory(device = "cuda"):
 
     gallery = clip_embs.cpu().numpy()
     gallery = gallery.reshape(-1, 512)
-    #gallery = embeddings.cpu().numpy()
-    #gallery = gallery.reshape(-1, 1024)
     
     nn = NearestNeighbors(n_neighbors=10, metric="cosine")
     nn.fit(gallery)
 
     times = []
 
-    for i in range(1,10):
+    for i in range(1, 10):
         start = time.time()
-        image = preprocess(Image.open(f"/media/data4TB/mirabella/clip2nerf/real_test/domainnet/real/real/airplane/real_002_00000{i}.jpg")).unsqueeze(0).to(device)
+        image = preprocess(Image.open(f"/media/data4TB/mirabella/clip2nerf/real_test/domainnet/real/real/airplane/real_002_00000{i}.jpg")).unsqueeze(0).cuda()
+        
         with torch.no_grad():
             image_features = clip_model.encode_image(image).cpu()
-            #out = ftn(image_features.to(torch.float32)).cpu()
-        #label = nn.kneighbors(out,return_distance=False)
-        label = nn.kneighbors(image_features,return_distance=False)
+
+        label = nn.kneighbors(image_features, return_distance=False)
         end = time.time()
         if i != 1:
             times.append(end-start)
 
-    print("The time of the pipeline clip-clip2nerf-retrieval is ", np.array(times).mean())
-    print("The size of gallery is:",gallery.itemsize*gallery.size/1024/1024,"Megabytes.")
+    print(f"The time of the pipeline clip-clip2nerf-retrieval is {np.array(times).mean()}")
+    print(f"The size of the gallery is {gallery.itemsize*gallery.size/1024/1024} megabytes")
 
 
 if __name__ == "__main__":
