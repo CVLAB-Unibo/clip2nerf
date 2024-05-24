@@ -5,7 +5,6 @@ import os
 import random
 from pathlib import Path
 
-import clip
 import cv2
 import h5py
 import imageio
@@ -18,18 +17,24 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from _dataset import data_config
-from _dataset.dset_img_gt import generate_clip_emb
 from _dataset.nerf_emb import NerfEmbeddings
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-clip_model, preprocess = clip.load("ViT-B/32", device=device)
+from _dataset.utils import generate_clip_emb
 
 
 def generate_emb_pairs(nview, out_root):
     seed = 42
     generator = torch.manual_seed(seed)
-    controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-depth", torch_dtype=torch.float16)
-    pipe = StableDiffusionControlNetPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", controlnet=controlnet, torch_dtype=torch.float16,requires_safety_checker = False, safety_checker= None)
+    controlnet = ControlNetModel.from_pretrained(
+        "lllyasviel/sd-controlnet-depth", 
+        torch_dtype=torch.float16
+    )
+    pipe = StableDiffusionControlNetPipeline.from_pretrained(
+        "runwayml/stable-diffusion-v1-5", 
+        controlnet=controlnet, 
+        torch_dtype=torch.float16, 
+        requires_safety_checker = False, 
+        safety_checker= None
+    )
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
 
     pipe.set_progress_bar_config(disable=True)
@@ -171,9 +176,13 @@ def generate_emb_pairs(nview, out_root):
 
             for i in range(nview):
                 with torch.inference_mode():
-                    image = pipe(f"{labels[class_id.item()]},{random.choice(prompts_per_class[class_id.item()])} high detailed, high quality, real photograph", 
-                                    num_inference_steps=20, generator=generator, image=Image.fromarray(imgs[i][0]),
-                                    negative_prompt="worst quality, low quality, monochromatic,drawing, badly drawn, anime, cartoon, cartoony, painting, paintings, sketch, sketches, rendering, fake",).images[0]
+                    image = pipe(
+                        f"{labels[class_id.item()]}, {random.choice(prompts_per_class[class_id.item()])} high detailed, high quality, real photograph", 
+                        num_inference_steps=20, 
+                        generator=generator, 
+                        image=Image.fromarray(imgs[i][0]),
+                        negative_prompt="worst quality, low quality, monochromatic, drawing, badly drawn, anime, cartoon, cartoony, painting, paintings, sketch, sketches, rendering, fake"
+                    ).images[0]
                     if imgs[i][1] < 10:
                         p = Path(out_root)/Path("imgs")/Path(f"{data_dir[0]}/train/0{imgs[i][1]}.png")
                     else:

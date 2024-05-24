@@ -4,41 +4,14 @@ sys.path.append("..")
 import os
 import random
 from pathlib import Path
-from typing import List
 
-import clip
 import h5py
-import numpy as np
-import torch
-from PIL import Image
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from _dataset import data_config
 from _dataset.nerf_emb import NerfEmbeddings
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-clip_model, preprocess = clip.load("ViT-B/32", device=device)
-
-
-class EmbeddingPairs(Dataset):
-    def __init__(self, root: Path, split: str) -> None:
-        super().__init__()
-
-        self.root = root / split
-        self.item_paths = sorted(self.root.glob("*.h5"), key=lambda x: int(x.stem))
-
-    def __len__(self) -> int:
-        return len(self.item_paths)
-
-    def __getitem__(self, index: int):
-        with h5py.File(self.item_paths[index], "r") as f:
-            nerf_embedding = np.array(f.get("nerf_embedding"))
-            clip_embedding = np.array(f.get("clip_embedding"))
-            class_id = np.array(f.get("class_id"))
-            data_dir = f["data_dir"][()].decode("utf-8")
-
-        return nerf_embedding, clip_embedding, data_dir, class_id
+from _dataset.utils import generate_clip_emb_mean, group_embs
 
 
 def generate_emb_pairs_mean(n_views: int):
@@ -82,58 +55,6 @@ def generate_emb_pairs_mean(n_views: int):
                 f.create_dataset("nerf_embedding", data=nerf_embedding)
                 f.create_dataset("clip_embedding", data=clip_embedding.detach().cpu().numpy())
                 f.create_dataset("class_id", data=class_id)
-                
-                
-def generate_clip_emb_mean(images_root: str, views: List[int]):
-    image_embeddings = []
-    for view in views:
-        image_path = f"{images_root}/{view:02}.png"
-        image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
-        with torch.no_grad():
-            image_features = clip_model.encode_image(image)
-        image_embeddings.append(image_features)
-
-    return torch.mean(torch.stack(image_embeddings), dim=0)
-                
-
-def group_embs(out_root):
-    dset_root = Path(data_config.EMB_IMG_SPLIT_PATH)
-
-    train_dset = EmbeddingPairs(dset_root, data_config.TRAIN_SPLIT)
-    train_loader = DataLoader(train_dset, batch_size=64, num_workers=0, shuffle=True)
-
-    val_dset = EmbeddingPairs(dset_root, data_config.VAL_SPLIT)
-    val_loader = DataLoader(val_dset, batch_size=64, num_workers=0, shuffle=True)
-
-    test_dset = EmbeddingPairs(dset_root, data_config.TEST_SPLIT)
-    test_loader = DataLoader(test_dset, batch_size=64, num_workers=0, shuffle=True)
-
-    loaders = [train_loader, val_loader, test_loader]
-    splits = [data_config.TRAIN_SPLIT, data_config.VAL_SPLIT, data_config.TEST_SPLIT]
-
-    for loader, split in zip(loaders, splits):
-        idx = 0
-
-        for batch in tqdm(loader, total=len(loader), desc=f"Saving {split} data"): 
-            save_groups(batch, idx, split, out_root)
-            idx += 1
-            
-            
-def save_groups(batch, idx, split, out_root):
-    h5_path = out_root / Path(f"{split}") / f"{idx}.h5"
-    h5_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with h5py.File(h5_path, "w") as f:
-        nerf_embeddings, clip_embeddings, data_dirs, class_ids = batch
-        
-        nerf_embeddings=nerf_embeddings.squeeze(1).detach().cpu().numpy()
-        class_ids=class_ids.squeeze(1).detach().cpu().numpy()
-        clip_embeddings=clip_embeddings.detach().cpu().numpy()
-        
-        f.create_dataset("nerf_embedding", data=nerf_embeddings)
-        f.create_dataset("clip_embedding", data=clip_embeddings)
-        f.create_dataset("data_dir", data=data_dirs)
-        f.create_dataset("class_id", data=class_ids)
 
 
 if __name__ == "__main__":

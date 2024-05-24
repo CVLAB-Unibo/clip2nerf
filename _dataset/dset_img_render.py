@@ -5,7 +5,6 @@ import math
 import os
 from pathlib import Path
 
-import clip
 import h5py
 import numpy as np
 import PIL.Image as Image
@@ -15,19 +14,16 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from _dataset import data_config
-from _dataset.dset_img_gt import generate_clip_emb
 from _dataset.nerf_emb import NerfEmbeddings
+from _dataset.utils import generate_clip_emb
 from classification import config
 from nerf.intant_ngp import NGPradianceField
 from nerf.loader_gt import NeRFLoaderGT
 from nerf.utils import Rays, render_image_GT
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-clip_model, preprocess = clip.load("ViT-B/32", device=device)
-
 
 def generate_emb_pairs():
-    scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32, device=device)
+    scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32)
     render_step_size = (
         (scene_aabb[3:] - scene_aabb[:3]).max()
         * math.sqrt(3)
@@ -38,10 +34,10 @@ def generate_emb_pairs():
     resolution=config.GRID_RESOLUTION,
     contraction_type=config.GRID_CONTRACTION_TYPE,
     )
-    occupancy_grid = occupancy_grid.to(device)
+    occupancy_grid = occupancy_grid.cuda()
     occupancy_grid.eval()
 
-    ngp_mlp = NGPradianceField(**config.INSTANT_NGP_MLP_CONF).to(device)
+    ngp_mlp = NGPradianceField(**config.INSTANT_NGP_MLP_CONF).cuda()
     ngp_mlp.eval()
 
     dset_root = Path(data_config.NF2VEC_EMB_PATH)
@@ -69,12 +65,12 @@ def generate_emb_pairs():
             path = os.path.join(data_config.NF2VEC_DATA_PATH, data_dir[0][2:])
 
             weights_file_path = os.path.join(path, "nerf_weights.pth")  
-            mlp_weights = torch.load(weights_file_path, map_location=torch.device(device))
+            mlp_weights = torch.load(weights_file_path, map_location="cuda")
             
             mlp_weights["mlp_base.params"] = [mlp_weights["mlp_base.params"]]
 
             grid_weights_path = os.path.join(path, "grid.pth")  
-            grid_weights = torch.load(grid_weights_path, map_location=device)
+            grid_weights = torch.load(grid_weights_path, map_location="cuda")
             grid_weights["_binary"] = grid_weights["_binary"].to_dense()
             n_total_cells = 884736
             grid_weights["occs"] = torch.empty([n_total_cells]) 
@@ -108,7 +104,7 @@ def generate_emb_pairs():
                                 color_bkgds=color_bkgd,
                                 grid_weights=grid_weights,
                                 ngp_mlp_weights=mlp_weights,
-                                device=device)
+                                device="cuda")
                 rgb_nerf = pixels * alpha + color_bkgd.unsqueeze(1) * (1.0 - alpha)
 
                 img = (rgb_nerf.squeeze(dim=0).cpu().detach().numpy() * 255).astype(np.uint8)

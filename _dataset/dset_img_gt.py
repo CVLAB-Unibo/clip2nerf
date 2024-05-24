@@ -4,19 +4,15 @@ sys.path.append("..")
 import os
 from pathlib import Path
 
-import clip
 import h5py
 import numpy as np
-import torch
 from PIL import Image
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from _dataset import data_config
 from _dataset.nerf_emb import NerfEmbeddings
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-clip_model, preprocess = clip.load("ViT-B/32", device=device)
+from _dataset.utils import generate_clip_emb
 
 
 def generate_emb_pairs():
@@ -73,14 +69,6 @@ def generate_emb_pairs():
                 f.create_dataset("data_dir", data=data_dirs)
                 f.create_dataset("class_id", data=np.array(class_ids))
                 f.create_dataset("img_number", data=np.array(img_numbers))
-                
-
-def generate_clip_emb(img):
-    image = preprocess(img).unsqueeze(0).to(device)
-    with torch.no_grad():
-        image_features = clip_model.encode_image(image)
-
-    return image_features
             
 
 if __name__ == "__main__":
