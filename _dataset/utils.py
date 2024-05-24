@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from _dataset import data_config
-from _dataset.nerf_emb import EmbeddingPairs
+from _dataset.emb import EmbeddingPairs
 
 
 def generate_clip_emb(img):

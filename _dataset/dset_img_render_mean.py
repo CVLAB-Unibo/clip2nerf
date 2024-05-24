@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from _dataset import data_config
-from _dataset.nerf_emb import NerfEmbeddings
+from _dataset.emb import NerfEmbeddings
 from _dataset.utils import generate_clip_emb, group_embs
 from classification import config
 from nerf.intant_ngp import NGPradianceField
