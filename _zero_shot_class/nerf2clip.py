@@ -17,8 +17,8 @@ from tqdm import tqdm
 from typing import Tuple
 
 from _dataset import data_config
-from _feature_transfer import network_config
-from _feature_transfer.ftn import FeatureTransferNetwork
+from _feature_mapping import network_config
+from _feature_mapping.fmn import FeatureMappingNetwork
 
 logging.disable(logging.INFO)
 os.environ["WANDB_SILENT"] = "true"
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     clip_model, _ = clip.load("ViT-B/32")
     text_embs = np.asarray([get_text_emb(capt, clip_model) for capt in captions])
     
-    nerf2clip = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    nerf2clip = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
     sd = torch.load(f"{data_config.CKPT_COSINE_PATH}/best.pt")
     nerf2clip.load_state_dict(sd["ftn"])
     nerf2clip = nerf2clip.eval().cuda()

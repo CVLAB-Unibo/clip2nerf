@@ -16,9 +16,9 @@ from _dataset import dir_config
 from classification import config
 from _generate import gen_confing
 from models.idecoder import ImplicitDecoder
-from _feature_transfer import network_config
-from _feature_transfer.ftn import FeatureTransferNetwork
-from _feature_transfer.utils import plot_embeddings, retrive_plot_params
+from _feature_mapping import network_config
+from _feature_mapping.fmn import FeatureMappingNetwork
+from _feature_mapping.utils import plot_embeddings, retrive_plot_params
 
 def gen_from_img():
     model, preprocess = clip.load("ViT-B/32")
@@ -56,7 +56,7 @@ def gen_from_img():
     ckpt = torch.load(ckpt_path)
     decoder.load_state_dict(ckpt["decoder"])
 
-    ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
     ftn_ckpt_path = gen_confing.MODEL_PATH
     ftn_ckpt = torch.load(ftn_ckpt_path)
     ftn.load_state_dict(ftn_ckpt["ftn"])
@@ -125,7 +125,7 @@ def gen_from_text(device="cuda"):
     clip_model, _ = clip.load("ViT-B/32")
     text_embs = np.asarray([get_text_emb(capt+"on a black background", clip_model) for capt in gen_confing.CAPTIONS])
 
-    ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
     ftn_ckpt = torch.load(gen_confing.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
@@ -194,7 +194,7 @@ def gen_from_real():
     ckpt = torch.load(ckpt_path)
     decoder.load_state_dict(ckpt["decoder"])
 
-    ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
     ftn_ckpt_path = dir_config.CKPT_COSINE_PATH
 
     ftn_ckpt = torch.load(ftn_ckpt_path)

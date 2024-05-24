@@ -1,6 +1,7 @@
 import torch.nn as nn
 
-class FeatureTransferNetwork(nn.Module):
+
+class FeatureMappingNetwork(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
         

@@ -10,9 +10,9 @@ from nerfacc import OccupancyGrid
 import pandas as pd
 import clip
 from PIL import Image
-from _feature_transfer import network_config
+from _feature_mapping import network_config
 from tqdm import tqdm
-from _feature_transfer.utils import retrive_plot_params
+from _feature_mapping.utils import retrive_plot_params
 import h5py
 from _retrieval import retrieval_config
 from sklearn.neighbors import NearestNeighbors
@@ -28,7 +28,7 @@ from _dataset import data_config
 
 from classification import config
 
-from _feature_transfer.ftn import FeatureTransferNetwork
+from _feature_mapping.fmn import FeatureMappingNetwork
 
 from models.idecoder import ImplicitDecoder
 from nerf.intant_ngp import NGPradianceField
@@ -326,7 +326,7 @@ def retrieval(n_view = 1, instance_level = False, mean = False, draw = False , d
 
     multiview = n_view > 1
 
-    ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
     ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
@@ -441,7 +441,7 @@ def get_recalls_true_imgs(gallery: Tensor, outputs: Tensor, labels_gallery: Tens
 @torch.no_grad()
 def retrieval_true_imgs(draw = False , device='cuda:0'):
 
-    ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
 
     ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
@@ -580,7 +580,7 @@ def retrieval_times_memory(device = "cuda"):
 
     clip_model, preprocess = clip.load("ViT-B/32", device=device)
 
-    ftn = FeatureTransferNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
+    ftn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
     ftn_ckpt = torch.load(retrieval_config.MODEL_PATH)
     ftn.load_state_dict(ftn_ckpt["ftn"])
     ftn.eval()
