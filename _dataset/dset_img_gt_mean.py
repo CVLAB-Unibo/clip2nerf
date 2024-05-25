@@ -57,7 +57,7 @@ def generate_emb_pairs_mean(n_views: int):
 
 
 if __name__ == "__main__":
-    n_views = 36
+    n_views = data_config.N_VIEWS_MEAN
     out_root = Path(data_config.EMB_IMG_PATH)
     
     generate_emb_pairs_mean(n_views)

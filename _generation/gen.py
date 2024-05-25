@@ -193,7 +193,7 @@ def gen_from_real():
     decoder.load_state_dict(ckpt["decoder"])
 
     fmn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    fmn_ckpt_path = data_config.CKPT_COSINE_PATH
+    fmn_ckpt_path = network_config.CKPT_COSINE_PATH
 
     fmn_ckpt = torch.load(fmn_ckpt_path)
     fmn.load_state_dict(fmn_ckpt["fmn"])

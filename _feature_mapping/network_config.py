@@ -16,5 +16,7 @@ LOSS_FUNCTION = "cosine"  # "cosine" or "l2"
 DATASET_LIST = [Path(data_config.EMB_IMG_PATH)]
 
 LOG = True
-
 WANDB_PROJECT = "clip2nerf"
+
+CKPT_COSINE_PATH = ""  # weights of clip2nerf/nerf2clip trained with cosine distance
+CKPT_L2_PATH = ""      # weights of clip2nerf/nerf2clip trained with L2 distance

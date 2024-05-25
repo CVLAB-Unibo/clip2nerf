@@ -1,20 +1,20 @@
 import sys
 sys.path.append("..")
 
+import logging
+import os
+from pathlib import Path
+from typing import Tuple
+
 import clip
 import h5py
-import logging
 import numpy as np
-import os
 import torch
 import wandb
-
-from pathlib import Path
 from sklearn.neighbors import NearestNeighbors
 from torch import Tensor
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from typing import Tuple
 
 from _dataset import data_config
 from _feature_mapping import network_config
@@ -24,7 +24,7 @@ logging.disable(logging.INFO)
 os.environ["WANDB_SILENT"] = "true"
 
 
-class Clip2NerfDataset(Dataset):
+class NerfEmbeddings(Dataset):
     def __init__(self, root: Path, split: str) -> None:
         super().__init__()
 
@@ -70,15 +70,15 @@ if __name__ == "__main__":
     text_embs = np.asarray([get_text_emb(capt, clip_model) for capt in captions])
     
     nerf2clip = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    sd = torch.load(f"{data_config.CKPT_COSINE_PATH}/best.pt")
-    nerf2clip.load_state_dict(sd["ftn"])
+    sd = torch.load(f"{network_config.CKPT_COSINE_PATH}/best.pt")
+    nerf2clip.load_state_dict(sd["fmn"])
     nerf2clip = nerf2clip.eval().cuda()
     
     neigh = NearestNeighbors(n_neighbors=1, metric="cosine")
     neigh.fit(text_embs)
     
     dset_root = Path(data_config.EMB_IMG_PATH)
-    test_dset = Clip2NerfDataset(dset_root, data_config.TEST_SPLIT)
+    test_dset = NerfEmbeddings(dset_root, data_config.TEST_SPLIT)
     test_loader = DataLoader(test_dset, batch_size=1)
     
     num_samples = 0
@@ -94,5 +94,5 @@ if __name__ == "__main__":
         num_samples += len(class_ids)
     accuracy = num_correct_preds / num_samples
             
-    wandb.init(project="clip2nerf", name=f"zero_shot_{Path(data_config.CKPT_COSINE_PATH).name}_30k")
+    wandb.init(project="clip2nerf")
     wandb.log({"accuracy": accuracy})

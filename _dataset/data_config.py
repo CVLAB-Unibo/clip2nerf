@@ -11,18 +11,14 @@ EMB_IMG_RENDER_SPLIT_PATH = ""  # CLIP embeddings of NeRF rendered views (one .h
 EMB_TEXT_PATH = ""              # CLIP embeddings of BLIP-2 captions
 EMB_CONTROLNET_PATH = ""        # CLIP embeddings of ControlNet-generated images
 
-### BLIP-2
 BLIP2_CAPTIONS_PATH = ""  # BLIP-2 captions of ShapeNetRender
 
-### CHECKPOINTS
-CKPT_COSINE_PATH = ""  # weights of clip2nerf/nerf2clip trained with cosine distance
-CKPT_L2_PATH = ""      # weights of clip2nerf/nerf2clip trained with L2 distance
-
-### SPLITS
 TRAIN_SPLIT = "train"
 VAL_SPLIT = "val"
 TEST_SPLIT = "test"
 
-### OTHER DATASETS
 DOMAINNET_PATH = ""
 SHAPENET_DEPTH_PATH = ""  # ShapeNetRender depth-maps
+
+N_VIEWS_MEAN = 36
+N_VIEWS_CONTROLNET = 7

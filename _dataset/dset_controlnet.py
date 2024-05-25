@@ -203,7 +203,7 @@ def generate_emb_pairs(nview, out_root):
 
 
 if __name__ == "__main__":
-    n_views = 7
+    n_views = data_config.N_VIEWS_CONTROLNET
     out_root = data_config.EMB_CONTROLNET_PATH
     
     generate_emb_pairs(n_views, out_root)

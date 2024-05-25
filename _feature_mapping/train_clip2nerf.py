@@ -69,9 +69,9 @@ class FMNTrainer:
 
         self.loss_function = loss_function
         if loss_function == "l2":
-            self.ckpts_path = Path(data_config.CKPT_L2_PATH)
+            self.ckpts_path = Path(network_config.CKPT_L2_PATH)
         elif loss_function == "cosine":
-            self.ckpts_path = Path(data_config.CKPT_COSINE_PATH)
+            self.ckpts_path = Path(network_config.CKPT_COSINE_PATH)
         self.ckpts_path.mkdir(parents=True, exist_ok=True)
 
         self.epoch = 0
