@@ -1,9 +1,7 @@
 import sys
 sys.path.append("..")
 
-import math
 import os
-import time
 import uuid
 from collections import defaultdict
 from pathlib import Path
@@ -14,11 +12,9 @@ import imageio.v2 as imageio
 import numpy as np
 import pandas as pd
 import torch
-from nerfacc import OccupancyGrid
 from PIL import Image
 from sklearn.neighbors import NearestNeighbors
 from torch import Tensor
-from torch.cuda.amp import autocast
 from tqdm import tqdm
 
 from dataset import data_config
@@ -29,130 +25,11 @@ from retrieval import retrieval_config
 from retrieval.utils import EmbeddingPairs
 from _nf2vec.classification import config
 from _nf2vec.models.idecoder import ImplicitDecoder
-from _nf2vec.nerf.instant_ngp import NGPradianceField
-from _nf2vec.nerf.utils import Rays, render_image, render_image_GT
 
-
-@torch.no_grad()
-def draw_images(decoder, embeddings, outputs, data_dirs):
-    scene_aabb = torch.tensor(config.GRID_AABB, dtype=torch.float32, device="cuda")
-    render_step_size = (
-        (scene_aabb[3:] - scene_aabb[:3]).max()
-        * math.sqrt(3)
-        / config.GRID_CONFIG_N_SAMPLES
-    ).item()
-    occupancy_grid = OccupancyGrid(
-    roi_aabb=config.GRID_AABB,
-    resolution=config.GRID_RESOLUTION,
-    contraction_type=config.GRID_CONTRACTION_TYPE,
-    )
-    occupancy_grid = occupancy_grid.to("cuda")
-    occupancy_grid.eval()
-
-    ngp_mlp = NGPradianceField(**config.INSTANT_NGP_MLP_CONF).to("cuda")
-    ngp_mlp.eval()
-    
-    img_name = str(uuid.uuid4())
-    idx = 0
-
-    plots_path = f"retrieval_plots/{img_name}"
-    if not os.path.exists(plots_path):
-        os.makedirs(plots_path)
-
-    for emb, out, dir in zip(embeddings, outputs, data_dirs):
-        path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:])
-
-        weights_file_path = os.path.join(path, "nerf_weights.pth")  
-        mlp_weights = torch.load(weights_file_path, map_location="cuda")
-        
-        mlp_weights["mlp_base.params"] = [mlp_weights["mlp_base.params"]]
-
-        grid_weights_path = os.path.join(path, "grid.pth")  
-        grid_weights = torch.load(grid_weights_path, map_location="cuda")
-        grid_weights["_binary"] = grid_weights["_binary"].to_dense()
-        n_total_cells = 884736
-        grid_weights["occs"] = torch.empty([n_total_cells]) 
-
-        grid_weights["occs"] = [grid_weights["occs"]] 
-        grid_weights["_binary"] = [grid_weights["_binary"]]
-        grid_weights["_roi_aabb"] = [grid_weights["_roi_aabb"]] 
-        grid_weights["resolution"] = [grid_weights["resolution"]]
-
-        emb = torch.tensor(emb, device="cuda", dtype=torch.float32)
-        emb = emb.unsqueeze(dim=0)
-        out = torch.tensor(out, device="cuda", dtype=torch.float32)
-        out = out.unsqueeze(dim=0)
-
-        for i in range(3):
-            plot_parmas = retrive_plot_params(path, i*10)
-            color_bkgd = plot_parmas["color_bkgd"].unsqueeze(0)
-            
-            rays = plot_parmas["rays"]
-            origins_tensor = rays.origins.detach().clone().unsqueeze(0)
-            viewdirs_tensor = rays.viewdirs.detach().clone().unsqueeze(0)
-
-            rays = Rays(origins=origins_tensor, viewdirs=viewdirs_tensor)
-            rays = rays._replace(origins=rays.origins.cuda(), viewdirs=rays.viewdirs.cuda())
-
-            with autocast():
-                pixels, alpha, _ = render_image_GT(
-                            radiance_field=ngp_mlp, 
-                            occupancy_grid=occupancy_grid, 
-                            rays=rays, 
-                            scene_aabb=scene_aabb, 
-                            render_step_size=render_step_size,
-                            color_bkgds=color_bkgd,
-                            grid_weights=grid_weights,
-                            ngp_mlp_weights=mlp_weights,
-                            device="cuda")
-                rgb_nerf = pixels * alpha + color_bkgd.unsqueeze(1) * (1.0 - alpha)
-
-                rgb_dec, alpha, _, _, _, _ = render_image(
-                                radiance_field=decoder,
-                                embeddings=emb,
-                                occupancy_grid=None,
-                                rays=rays,
-                                scene_aabb=scene_aabb,
-                                render_step_size=render_step_size,
-                                render_bkgd=color_bkgd,
-                                grid_weights=None
-                )
-                rgb_out, alpha, _, _, _, _ = render_image(
-                                radiance_field=decoder,
-                                embeddings=out,
-                                occupancy_grid=None,
-                                rays=rays,
-                                scene_aabb=scene_aabb,
-                                render_step_size=render_step_size,
-                                render_bkgd=color_bkgd,
-                                grid_weights=None
-                )
-            if i == 0:
-                gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"00.png")
-            else:
-                gt_path = os.path.join(data_config.NF2VEC_DATA_PATH, dir[2:], data_config.TRAIN_SPLIT, f"{i*10}.png")
-
-            imageio.imwrite(
-                os.path.join(plots_path, f"{idx}_{i}_gt.png"),
-                imageio.imread(gt_path)
-            )
-            imageio.imwrite(
-                os.path.join(plots_path, f"{idx}_{i}_nerf.png"),
-                (rgb_nerf.squeeze(dim=0).cpu().detach().numpy() * 255).astype(np.uint8)
-            )
-            imageio.imwrite(
-                os.path.join(plots_path, f"{idx}_{i}_dec.png"),
-                (rgb_dec.squeeze(dim=0).cpu().detach().numpy() * 255).astype(np.uint8)
-            )
-            imageio.imwrite(
-                os.path.join(plots_path, f"{idx}_{i}_out.png"),
-                (rgb_out.squeeze(dim=0).cpu().detach().numpy() * 255).astype(np.uint8)
-            )
-        idx += 1
 
 
 @torch.no_grad()
-def draw_images_tesi(data_dirs, d):
+def draw_images(data_dirs, d):
     img_name = str(uuid.uuid4())
     
     plots_path = f"retrieval_plots/{img_name}"
@@ -270,12 +147,8 @@ def get_recalls(
             label_query_tuple = tuple(label_query)
             if dic_renderings[label_query_tuple] < 2:
                 dic_renderings[label_query_tuple] += 1
-                draw_images(
-                    decoder, 
-                    gallery[indices_matched], 
-                    outputs[indices_matched], 
-                    np.array(data_dirs)[indices_matched]
-                )
+                draw_images(np.array(data_dirs)[indices_matched], d)
+
 
         for k in kk:
             indices_matched_temp = indices_matched[0:k]
@@ -528,7 +401,7 @@ def get_recalls_nerf_excluded(
             label_query_tuple = tuple(label_query)
             if dic_renderings[label_query_tuple] < 2:
                 dic_renderings[label_query_tuple] += 1
-                draw_images_tesi(np.array(data_dirs)[indices_matched], d)
+                draw_images(np.array(data_dirs)[indices_matched], d)
 
         for k in kk:
             indices_matched_temp = indices_matched[0:k + 1]
@@ -547,72 +420,6 @@ def get_recalls_nerf_excluded(
         recalls[key] = value / (1.0 * len(gallery))
 
     return recalls
-
-
-@torch.no_grad()
-def retrieval_times_memory():
-    clip_model, preprocess = clip.load("ViT-B/32", device="cuda")
-
-    fmn = FeatureMappingNetwork(network_config.INPUT_SHAPE, network_config.LAYERS, network_config.OUTPUT_SHAPE)
-    fmn_ckpt = torch.load(retrieval_config.MODEL_PATH)
-    fmn.load_state_dict(fmn_ckpt["fmn"])
-    fmn.eval()
-    fmn.cuda()
-    
-    dset_root = Path(retrieval_config.GALLERY_PATH)
-    dset = EmbeddingPairs(dset_root, retrieval_config.DATASET_SPLIT)
-
-    seen_embeddings = set()
-
-    embeddings = []
-    clip_embs = []
-    labels = []
-    data_dirs = []
-
-    for i in range(len(dset)):
-        embedding, clip_emb, data_dir, label = dset[i]
-
-        embedding_list = torch.split(embedding, 1) 
-        clip_emb_list = torch.split(clip_emb, 1) 
-        label_list = torch.split(label, 1)
-
-        for emb, c, lab, dir in zip(embedding_list, clip_emb_list, label_list, data_dir):
-            emb_tuple = tuple(emb.flatten().tolist())
-            
-            if emb_tuple not in seen_embeddings:
-                seen_embeddings.add(emb_tuple)
-            
-            embeddings.append(emb)
-            clip_embs.append(c)
-            labels.append(lab)
-            data_dirs.append(dir)
-
-    embeddings = torch.stack(embeddings)
-    clip_embs = torch.stack(clip_embs)
-    labels = torch.stack(labels)
-
-    gallery = clip_embs.cpu().numpy()
-    gallery = gallery.reshape(-1, 512)
-    
-    nn = NearestNeighbors(n_neighbors=10, metric="cosine")
-    nn.fit(gallery)
-
-    times = []
-
-    for i in range(1, 10):
-        start = time.time()
-        image = preprocess(Image.open(f"/media/data4TB/mirabella/clip2nerf/real_test/domainnet/real/real/airplane/real_002_00000{i}.jpg")).unsqueeze(0).cuda()
-        
-        with torch.no_grad():
-            image_features = clip_model.encode_image(image).cpu()
-
-        label = nn.kneighbors(image_features, return_distance=False)
-        end = time.time()
-        if i != 1:
-            times.append(end-start)
-
-    print(f"The time of the pipeline clip-clip2nerf-retrieval is {np.array(times).mean()}")
-    print(f"The size of the gallery is {gallery.itemsize*gallery.size/1024/1024} megabytes")
 
 
 if __name__ == "__main__":
