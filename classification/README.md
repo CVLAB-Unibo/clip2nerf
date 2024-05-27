@@ -1,0 +1,1 @@
+# Zero-shot NeRF classification

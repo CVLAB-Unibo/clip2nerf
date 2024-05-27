@@ -27,7 +27,6 @@ from _nf2vec.classification import config
 from _nf2vec.models.idecoder import ImplicitDecoder
 
 
-
 @torch.no_grad()
 def draw_images(data_dirs, d):
     img_name = str(uuid.uuid4())
